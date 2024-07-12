@@ -13,5 +13,3 @@ Map the start.py file to PowerFactory script as the executable.
 
 * A single line diagram is only created if a template file is stored at the following location within the PowerFactory Data Manager:
 /user/templates
-* A copy of this template file is stored in the following directory of the codebase:
-* /pf SLD template file
