@@ -29,22 +29,22 @@ def main(app):
 
     if regional_model in der_proj_name:
         # This is a regional model
-        # with temporary_variation(app):
-        #     all_fault_studies = {}
-        feeders_devices, user_selection, _ = gi.get_input(app, regional_model)
-        for feeder, sites in feeders_devices.items():
-            site_name_map = mf.site_name_convert(sites)
-            feeder_obj = app.GetCalcRelevantObjects(feeder + ".ElmFeeder")[0]
-            study_results, detailed_fls, line_fls = fs.fault_study(app, feeder_obj, site_name_map)
-            device_list = ds.format_devices(study_results, user_selection, site_name_map)
-            pr.create_folder(app)
-            pr.plot_all_relays(app, device_list)
-            pa.audit_all_relays(app, device_list)
+        with temporary_variation(app):
+            all_fault_studies = {}
+            feeders_devices, user_selection, _ = gi.get_input(app, regional_model)
+            for feeder, sites in feeders_devices.items():
+                site_name_map = mf.site_name_convert(sites)
+                feeder_obj = app.GetCalcRelevantObjects(feeder + ".ElmFeeder")[0]
+                study_results, detailed_fls, line_fls = fs.fault_study(app, feeder_obj, site_name_map)
+                device_list = ds.format_devices(study_results, user_selection, site_name_map)
+                pr.create_folder(app)
+                pr.plot_all_relays(app, device_list)
+                # pa.audit_all_relays(app, device_list)
 
-            # all_fault_studies[feeder] = device_list
+                # all_fault_studies[feeder] = device_list
 
 
-            # gen_info = gi.get_grid_data(app)
+                # gen_info = gi.get_grid_data(app)
     elif seq_model in der_proj_name:
         # This is a SEQ model
         pass
@@ -54,6 +54,7 @@ def main(app):
             "Please contact the script administrator to resolve this issue."
         )
         raise RuntimeError(msg)
+
 
 
 if __name__ == '__main__':

@@ -4,10 +4,11 @@ from devices import devices as ds
 def plot_all_relays(app, device_list):
 
     app.PrintPlain("Generating device time overcurrent plots")
+    new_format = new_page_format(app)
     study_case = app.GetActiveStudyCase()
     graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
-    drawing_format(graphics_board, "210_x_61")
     study_case.Deactivate()
+    drawing_format(graphics_board, new_format)
 
     for device in device_list:
         if device.object.GetClassName() == 'ElmRelay':
@@ -18,12 +19,11 @@ def plot_all_relays(app, device_list):
             new_diagram = create_slf(app, vipage, device)
             if new_diagram:
                 update_slf(app, new_diagram, device)
-                # graphic = vipage.GetContents(f"{device.object.loc_name} Graphic.VisGrfnet")[0]
-                # graphic.SetAttribute("fixPos", 1)
+            vipage.Close()
+            create_slf(app, vipage, device, fixpos=True)
         else:
             app.PrintPlain('No relays to plot')
-    # drawing_format(graphics_board, "A4")
-    app.Rebuild(2)
+    drawing_format(graphics_board, new_format, reset=True)
 
     study_case.Activate()
 
@@ -77,14 +77,21 @@ def create_plot(app, graphics_board, relay, f_type: str):
     return vipage
 
 
-def create_slf(app, project_folder, relay):
+def create_slf(app, project_folder, relay, fixpos=False):
 
     user = app.GetCurrentUser()
     name = relay.object.loc_name
-    template_folder = user.GetContents('templates')[0]
-    diagram = template_folder.GetContents('2 Device Radial.IntGrfnet')[0]
-
     network_graphic = project_folder.GetContents(f"{name} Graphic.VisGrfnet")
+    if fixpos:
+        network_graphic[0].SetAttribute("fixPos", 1)
+        return
+    template_folder = user.GetContents('templates')
+    if not template_folder:
+        app.PrintPlain(f"A SLD for {name} was not created as no template file was found in the user directory")
+        return False
+    diagram = template_folder[0].GetContents('2 Device Radial.IntGrfnet')[0]
+
+
     if not network_graphic:
         network_graphic = project_folder.CreateObject("VisGrfnet", f'{name} Graphic')
         new_diagram = network_graphic.AddCopy(diagram)
@@ -192,7 +199,8 @@ def update_slf(app, new_diagram, relay):
     go_tr_fuse.iCol = 4                         # Blue
     go_tr_fuse.pDataObj = fuse_1
     ds_tr_fuse = ds.get_fuse_element(app, relay.ds_tr_size)
-    fuse_1.loc_name = ds_tr_fuse.loc_name
+    if ds_tr_fuse:
+        fuse_1.loc_name = ds_tr_fuse.loc_name
 
     go_ds_tr = [obj for obj in objects if obj.loc_name == 'Graphical Net Object18'][0]
     go_ds_tr.pDataObj = ds_tr
@@ -266,14 +274,14 @@ def xvalue_settings(constant, name, value):
 
     constant.loc_name = name            # name
     constant.label = 1
-    constant.lab_text = name          # line label
+    constant.lab_text = [name]          # line label
     constant.show = 1                   # line with intersections
     constant.label = 0                  # line with intersections
     constant.iopt_lab= 3                # position
     constant.value= value
     constant.color = 1                  # line with intersections
     #constant.style = 1
-    constant.width = 0.4
+    constant.width = 5
     constant.xis = 0                    # Current
 
 
@@ -301,18 +309,44 @@ def create_folder(app):
     if title not in existing_study_fold:
         prjt.CreateObject("IntFolder", title)
 
+def new_page_format(app):
 
-def drawing_format(graphics_board, format):
+    prjt = app.GetActiveProject()
+    settings = prjt.GetContents('Settings.SetFold')[0]
+    formats = settings.GetContents("Page Formats.SetFoldpage")[0]
+    new_format_name = '210_x_61'
+    new_format = formats.GetContents(f"{new_format_name}.SetFormat")
+    if not new_format:
+        new_format = formats.CreateObject("SetFormat", new_format_name)
+    return new_format
+
+
+def drawing_format(graphics_board, format_graph, reset=False):
     """
 
     :param graphics_board:
-    :param format: "A4", "210_x_61"
+    :param format:
+    :param reset:
     :return:
     """
 
+    draw_form_list = graphics_board.GetContents("Drawing Format.SetGrfpage")
+    if not draw_form_list:
+        draw_form = graphics_board.CreateObject("SetGrfpage", "Drawing Format")
+    else:
+        draw_form = draw_form_list[0]
 
-    draw_form = graphics_board.GetContents("Drawing Format.SetGrfpage")[0]
+    if reset:
+        draw_form.aDrwFrm = 'A4'            # Format
+        return
+
+    format_graph.iSizeX = 210
+    format_graph.iSizeY = 61
+    format_graph.iLeft = 0
+    format_graph.iRight = 0
+    format_graph.iTop = 0
+    format_graph.iBottom = 0
 
     draw_form.iDrwFrm = 1           # 0 = Portrait, 1 = Landscape
-    draw_form.aDrwFrm = format        # Format
+    draw_form.aDrwFrm = format_graph.loc_name     # Format
 
