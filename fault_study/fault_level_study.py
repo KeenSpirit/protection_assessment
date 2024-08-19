@@ -73,8 +73,7 @@ def fault_study(app, feeder, site_name_map) -> tuple[list, list, list]:
     detailed_fls = [pg_max_all, phase_max_all, pg_min_all, phase_min_all, section_loads]
 
     # Obtain line results for conductor damage studies
-    # line_fls = lines_results.regional_lines(app, phase_max_all, pg_max_all, phase_min_all, pg_min_all)
-    line_fls = None
+    line_fls = lines_results.regional_lines(app, device_lines, phase_max_all, pg_max_all, phase_min_all, pg_min_all)
 
     return study_results, detailed_fls, line_fls
 

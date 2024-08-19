@@ -1,5 +1,6 @@
 import sys
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+from dataclasses import dataclass
 import powerfactorytyping as pft
 
 
@@ -71,7 +72,7 @@ def lines(app, ppp_max_all, pp_max_all, pg_max_all, ppp_min_all, pp_min_all, pg_
             lines_sys_norm_min_2p, lines_sys_norm_min_pg, lines_type, lines_therm_rating)
 
 
-def regional_lines(app, ppp_max_all, pg_max_all, pp_min_all, pg_min_all):
+def regional_lines(app, device_lines, ppp_max_all, pg_max_all, pp_min_all, pg_min_all):
     """
     For each line in the feeder, obtain its maximum and minimum fault levels
     THIS FUNCTION CURRENTLY DOES NOT WORK. TO BE FIXED AT A LATER DATE.
@@ -83,39 +84,60 @@ def regional_lines(app, ppp_max_all, pg_max_all, pp_min_all, pg_min_all):
     :return:
     """
 
-    line_sections = get_line_sections(app)
-    lines_max_3p = {section: {} for section in ppp_max_all}
-    lines_max_pg = {section: {} for section in ppp_max_all}
-    lines_min_2p = {section: {} for section in ppp_max_all}
-    lines_min_pg = {section: {} for section in ppp_max_all}
-    lines_type = {section: {} for section in ppp_max_all}
-    lines_therm_rating = {section: {} for section in ppp_max_all}
+    all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
+    grids = [grid for grid in all_grids if grid.outserv == 0]
+
+    lines_fls = {section: [] for section in ppp_max_all}
     for section, terminals in ppp_max_all.items():
-        terminal_list = []
-        for terminal in terminals:
-            terminal_list.append(terminal)
-        for line, line_terms in line_sections.items():
-            # Check that all lines in line_terms are in the section terminal list
-            check = all(item in terminal_list for item in line_terms)
+        terminal_list = [key for key in terminals.keys()]
+        lines = device_lines[section]
+        sect_lines = []
+        for line in lines:
+            cub_1 = line.bus1
+            ds_1 = cub_1.GetAll(1, 0)
+            if any(item in grids for item in ds_1):
+                ds_2 = cub_1.GetAll(0, 0)
+                ds_terms = [object for object in ds_2 if object.GetClassName() == "ElmTerm" and object.uknom > 1]
+            else:
+                ds_terms = [object for object in ds_1 if object.GetClassName() == "ElmTerm" and object.uknom > 1]
+            line_sect_terms = [element for element in ds_terms if element in terminal_list]
+            min_2p, min_pg, = 99999, 99999
+            for term in line_sect_terms:
+                if 1 < pp_min_all[section][term] < min_2p:
+                    min_2p = pp_min_all[section][term]
+                if 1 < pg_min_all[section][term] < min_pg:
+                    min_pg = pg_min_all[section][term]
+
+            terminals = [element for element in line.GetConnectedElements()]
+            check = any(item in terminal_list for item in terminals)
             if check is True:
                 max_3p, max_pg = 0, 0
-                min_2p, min_pg, = 99999, 99999
-                for term in line_terms:
-                    if ppp_max_all[section][term] >= max_3p:
-                        max_3p = section[term]
-                    if pg_max_all[section][term] >= max_pg:
-                        max_pg = pg_max_all[section][term]
-                    if pp_min_all[section][term] <= min_2p:
-                        min_2p = pp_min_all[section][term]
-                    if pg_min_all[section][term] <= min_pg:
-                        min_pg = pg_min_all[section][term]
-                lines_max_3p[section][line] = max_3p
-                lines_max_pg[section][line] = max_pg
-                lines_min_2p[section][line] = min_2p
-                lines_min_pg[section][line] = min_pg
-                lines_type[section][line], lines_therm_rating[section][line] = get_conductor(line)
+                for term in terminals:
+                    if term in terminal_list:
+                        if ppp_max_all[section][term] >= max_3p:
+                            max_3p = ppp_max_all[section][term]
+                        if pg_max_all[section][term] >= max_pg:
+                            max_pg = pg_max_all[section][term]
+                line_type, line_therm_rating = get_conductor(line)
 
-    return [lines_max_3p, lines_max_pg, lines_min_2p, lines_min_pg, lines_type, lines_therm_rating]
+                line = Line(
+                    line,
+                    round(max_3p),
+                    round(max_pg),
+                    round(min_2p),
+                    round(min_pg),
+                    line_type,
+                    line_therm_rating,
+                    None,
+                    None,
+                    None,
+                    None
+                )
+                sect_lines.append(line)
+        lines_fls[section] = sect_lines
+
+
+    return lines_fls
 
 
 def get_line_sections(app) -> dict[pft.ElmLne: list[str]]:
@@ -150,13 +172,13 @@ def get_conductor(line):
     if construction == 'TypGeo':
         TypCon = line.GetAttribute("e:pCondCir")
         conductor_type = TypCon.loc_name
-        thermal_rating = round(TypCon.GetAttribute("e:Ithr"), 3)
+        thermal_rating = round(TypCon.GetAttribute("e:Ithr"), 3) * 1000
     elif construction == 'TypCabsys':
         conductor_type = 'NA'
         thermal_rating = 'NA'
     elif construction == "TypLne":
         conductor_type = line.typ_id.loc_name
-        thermal_rating = round(line.typ_id.GetAttribute("e:Ithr"), 3)
+        thermal_rating = round(line.typ_id.GetAttribute("e:Ithr"), 3) * 1000
     elif construction == "TypTow":
         conductor_type = 'NA'
         thermal_rating = 'NA'
@@ -164,3 +186,17 @@ def get_conductor(line):
         conductor_type = 'NA'
         thermal_rating = 'NA'
     return conductor_type, thermal_rating
+
+@dataclass
+class Line:
+    object: object
+    max_fl_ph: float
+    max_fl_pg: float
+    min_fl_ph: float
+    min_fl_pg: float
+    line_type: str
+    thermal_rating: float
+    ph_clear_time: float
+    ph_fl: float
+    pg_clear_time: float
+    pg_fl: float

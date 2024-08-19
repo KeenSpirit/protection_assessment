@@ -121,7 +121,6 @@ class Device:
     sect_device: list
 
 
-
 SWER_f_sizes = {
     10: 'FUSE LINK 11/22/33kV 3A CLASS K',
     25: 'FUSE LINK 11/22/33kV 3A CLASS K'
