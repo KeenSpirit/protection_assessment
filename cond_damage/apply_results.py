@@ -25,13 +25,13 @@ def rewrite_results(app, lines, fault_type):
             if fault_level < allowable_fl:
                 # No conductor damage
                 line.object.SetAttribute(f"e:{dpl_num}", 2)
-                app.PrintPlain(f"line: {line.object.loc_name} {fault_type}: GREEN")
+                # app.PrintPlain(f"line: {line.object.loc_name} {fault_type}: GREEN")
             elif fault_level > allowable_fl:
                 # Conductor damage
                 line.object.SetAttribute(f"e:{dpl_num}", 1)
-                app.PrintPlain(f"line: {line.object.loc_name} {fault_type}: RED")
-                app.PrintPlain(f"rating: {line.thermal_rating}, clear time: {clear_time}")
-                app.PrintPlain(f"fault_level: {fault_level}, allowable_fl: {allowable_fl}")
+                # app.PrintPlain(f"line: {line.object.loc_name} {fault_type}: RED")
+                # app.PrintPlain(f"rating: {line.thermal_rating}, clear time: {clear_time}")
+                # app.PrintPlain(f"fault_level: {fault_level}, allowable_fl: {allowable_fl}")
         except Exception:
             # No data
             line.object.SetAttribute(f"e:{dpl_num}", 0)

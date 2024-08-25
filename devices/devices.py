@@ -1,17 +1,25 @@
 from dataclasses import dataclass
-from save_results import map_functs as mf
 
 
 def create_fuse(app, relay):
 
 
-    tr_size = relay.ds_tr_size
+    tr_size = relay.max_tr_size
     typfuse = get_fuse_element(app, tr_size)
     if not typfuse:
         return []
-    fuse_name = relay.ds_tr_site
+    fuse_name = relay.max_ds_tr
     equip = app.GetProjectFolder("equip")
-    fuse_folder = equip.GetContents("Fuses.IntFolder", True)[0]
+    protection = equip.GetContents("Protection.IntFolder", True)
+    if not protection:
+        protection = equip.CreateObject("IntFolder", "Protection")
+    else:
+        protection = protection[0]
+    fuse_folder = protection.GetContents("Fuses.IntFolder", True)
+    if not fuse_folder:
+        fuse_folder = protection.CreateObject("IntFolder", "Fuses")
+    else:
+        fuse_folder = fuse_folder[0]
     lib_contents = fuse_folder.GetContents("*.RelFuse", 0)
     if lib_contents:
         for fuse in lib_contents:
@@ -45,80 +53,56 @@ def f_types(app):
     return fuse_types
 
 
-def format_devices(study_results, user_selection, site_name_map):
-
-    """
-
-    :param study_results:
-    :param site_name_map:
-    :return:
-    """
-
-    (sect_phase_max, sect_pg_max, sect_phase_min, sect_pg_min, sect_tr_phase_max, sect_tr_pg_max, device_max_load,
-     us_devices, ds_devices, ds_capacity, device_lines) = study_results
-    selected_devices = list(user_selection.values())[0]
-
-    def str_check(dict):
-        if dict == 'no terminations':
-            return 0
-        (value,) = dict.values()
-        return value
-
-    device_list = []
-    # Store results in dictionary:
-    for device, value in site_name_map.items():
-        if [device][0] in selected_devices:
-            (elmterm,) = value.values()
-            max_ph_fl = str_check(sect_phase_max[elmterm])
-            (max_pg_fl,) = sect_pg_max[elmterm].values()
-            min_ph_fl = str_check(sect_phase_min[elmterm])
-            (min_pg_fl,) = sect_pg_min[elmterm].values()
-            tr_max_ph = str_check(sect_tr_phase_max[elmterm])
-            if sect_tr_pg_max[elmterm] == 'no terminations':
-                tr_max_pg = 0
-                tr_max_name = ""
-            else:
-                tr_max_pg = next(iter(sect_tr_pg_max[elmterm].values()))
-                tr_max_name = next(iter(sect_tr_pg_max[elmterm]))
-                tr_max_name = tr_max_name.cpSubstat.loc_name
-            max_tr_size = device_max_load[elmterm]
-            ds_device_names = [mf.term_element(device, site_name_map, element=True) for device in ds_devices[elmterm]]
-            us_device_names = [mf.term_element(device, site_name_map, element=True) for device in us_devices[elmterm]]
-            section_lines = device_lines[elmterm]
-
-            device = Device(
-                device,
-                round(max_ph_fl),
-                round(max_pg_fl),
-                round(min_ph_fl),
-                round(min_pg_fl),
-                tr_max_name,
-                round(max_tr_size),
-                round(tr_max_pg),
-                round(tr_max_ph),
-                ds_device_names,
-                us_device_names,
-                section_lines
-                )
-            device_list.append(device)
-
-    return device_list
+@dataclass
+class Device:
+    object: object
+    cubicle: object
+    term: object
+    ds_capacity: float
+    max_fl_ph: float
+    max_fl_pg: float
+    min_fl_ph: float
+    min_fl_pg: float
+    max_ds_tr: str
+    max_tr_size: int
+    tr_max_ph: float
+    tr_max_pg: float
+    sect_terms: list
+    sect_loads: list
+    sect_lines: list
+    us_devices: list
+    ds_devices: list
 
 
 @dataclass
-class Device:
+class Line:
     object: object
     max_fl_ph: float
     max_fl_pg: float
     min_fl_ph: float
     min_fl_pg: float
-    ds_tr_site: str
-    ds_tr_size: int
-    ds_tr_ph: float
-    ds_tr_pg: float
-    ds_devices: list
-    us_device: list
-    sect_device: list
+    line_type: str
+    thermal_rating: float
+    ph_clear_time: float
+    ph_fl: float
+    pg_clear_time: float
+    pg_fl: float
+
+
+@dataclass
+class Termination:
+    object: object
+    max_fl_ph: float
+    max_fl_pg: float
+    min_fl_ph: float
+    min_fl_pg: float
+
+
+@dataclass
+class Load:
+    object: object
+    term: object
+    load_kva: float
 
 
 SWER_f_sizes = {

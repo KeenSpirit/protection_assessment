@@ -1,33 +1,32 @@
-
-from save_results import map_functs as mf
 from devices import relays
 from cond_damage import conditional_formatting as cf
 from cond_damage import apply_results as ar
-from importlib import reload
 
+from importlib import reload
 reload(relays)
 reload(cf)
 reload(ar)
 
 
-def cond_damage(app, line_fls, site_name_map):
+def cond_damage(app, devices):
 
+    app.PrintPlain("Performing conductor damage assessment...")
     cf.set_up(app)
 
-    for section, lines in line_fls.items():
-        device = mf.term_element(section, site_name_map, element=True)
-
+    for device in devices:
+        dev_obj = device.object
+        lines = device.sect_lines
         fault_type = '2-Phase'
         for line in lines:
             fl_step = 10
-            min_fl_clear_times = fault_clear_times(device, line, fl_step, fault_type)
+            min_fl_clear_times = fault_clear_times(dev_obj, line, fl_step, fault_type)
             worst_case_energy(line, min_fl_clear_times, fault_type)
         ar.rewrite_results(app, lines, fault_type)
 
         fault_type = 'Phase-Ground'
         for line in lines:
             fl_step = 10
-            min_fl_clear_times = fault_clear_times(device, line, fl_step, fault_type)
+            min_fl_clear_times = fault_clear_times(dev_obj, line, fl_step, fault_type)
             worst_case_energy(line, min_fl_clear_times, fault_type)
         ar.rewrite_results(app, lines, fault_type)
 
@@ -224,6 +223,8 @@ def worst_case_energy(line, min_fl_clear_times,fault_type):
     max_pair = [None, None]
 
     for fl, clear_time in min_fl_clear_times.items():
+        if clear_time is None:
+            continue
         energy = fl ** 2 * clear_time
         if energy > max_energy:
             max_energy = energy

@@ -1,296 +1,292 @@
 import sys
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
 import powerfactorytyping as pft
-from importlib import reload
+from devices import devices as ds
 from fault_study import lines_results, analysis, floating_terminals as ft
+from logging_config.configure_logging import log_arguments
 
-reload(analysis)
+from importlib import reload
 reload(ft)
-reload(lines_results)
 
 
-def fault_study(app, feeder, site_name_map) -> tuple[list, list, list]:
+def fault_study(app, feeder, sites):
     """
 
     :param app:
     :param feeder:
-    :param site_name_map:
+    :param sites:
     :return:
     """
 
-    # For each of the feeder devices, identify all downstream nodes
-    devices_terminals, devices_loads, device_lines = get_downstream_objects(app, site_name_map)
-    # Update all devices with the lists of downstream devices and upstreams devices
-    us_devices, ds_devices = us_ds_device(devices_terminals)
+    app.PrintPlain("Performing fault level study...")
+    devices = [
+        ds.Device(site,site.fold_id,site.fold_id.cterm,None,None,None,None,None,None,None,None,None,[],[],[],[],[])
+        for site in sites
+    ]
 
-    ds_capacity = get_ds_capacity(devices_loads)
-    section_loads = get_device_sections(devices_loads)
-    device_max_load, device_max_trs = get_section_max_tr(section_loads)
-    devices_sections = get_device_sections(devices_terminals)
-    floating_terms = ft.get_floating_terminals(feeder, devices_sections)
+    get_downstream_objects(devices)
+    us_ds_device(devices)
+    get_ds_capacity(devices)
+    get_device_sections(devices)
 
-    app.PrintPlain(f'Getting {feeder.loc_name} maximum fault levels...')
-    bound = 'Max'
-    f_type = 'Ground'
-    analysis.short_circuit(app, bound, f_type)
-    # Max transformer data
-    max_tr_pg_fls = terminal_fls(device_max_trs, f_type)
-    sect_tr_pg_max = sect_fl_bound(max_tr_pg_fls, bound)
-    # Terminal data
-    pg_max_first_pass = terminal_fls(devices_sections, f_type)
-    pg_max_all = append_floating_terms(app, pg_max_first_pass, floating_terms, bound, f_type)
-    sect_pg_max = sect_fl_bound(pg_max_all, bound)
+    analysis.short_circuit(app, bound='Max', f_type='Ground')
+    terminal_fls(devices, bound='Max', f_type='Ground')
+    analysis.short_circuit(app, bound='Max', f_type='3 Phase')
+    terminal_fls(devices, bound='Max', f_type='3 Phase')
+    analysis.short_circuit(app, bound='Min', f_type='Ground')
+    terminal_fls(devices, bound='Min', f_type='Ground')
+    analysis.short_circuit(app, bound='Min', f_type='2 Phase')
+    terminal_fls(devices, bound='Min', f_type='2 Phase')
 
-    f_type = '3 Phase'
-    analysis.short_circuit(app, bound, f_type)
-    # Max transformer data
-    max_tr_p_fls = terminal_fls(device_max_trs, f_type)
-    sect_tr_phase_max = sect_fl_bound(max_tr_p_fls, bound)
-    # Terminal data
-    phase_max_first_pass = terminal_fls(devices_sections, f_type)
-    phase_max_all = append_floating_terms(app, phase_max_first_pass, floating_terms, bound, f_type)
-    sect_phase_max = sect_fl_bound(phase_max_all, bound)
+    floating_terms = ft.get_floating_terminals(feeder, devices)
+    append_floating_terms(app, devices, floating_terms)
+    update_device_data(devices)
+    update_line_data(devices)
+    print_devices(app, devices)
 
-    app.PrintPlain(f'Getting {feeder.loc_name} minimum fault levels...')
-    bound = 'Min'
-    f_type = 'Ground'
-    analysis.short_circuit(app, bound, f_type)
-    pg_min_first_pass = terminal_fls(devices_sections, f_type)
-    pg_min_all = append_floating_terms(app, pg_min_first_pass, floating_terms, bound, f_type)
-    sect_pg_min = sect_fl_bound(pg_min_all, bound)
-
-    f_type = '2 Phase'
-    analysis.short_circuit(app, bound, f_type)
-    phase_min_first_pass = terminal_fls(devices_sections, f_type)
-    phase_min_all = append_floating_terms(app, phase_min_first_pass, floating_terms, bound, f_type)
-    sect_phase_min = sect_fl_bound(phase_min_all, bound)
-
-    # Package study results
-    study_results = [sect_phase_max, sect_pg_max, sect_phase_min, sect_pg_min, sect_tr_phase_max, sect_tr_pg_max,
-                     device_max_load, us_devices, ds_devices, ds_capacity, device_lines]
-
-    # Package detailed fl data
-    detailed_fls = [pg_max_all, phase_max_all, pg_min_all, phase_min_all, section_loads]
-
-    # Obtain line results for conductor damage studies
-    line_fls = lines_results.regional_lines(app, device_lines, phase_max_all, pg_max_all, phase_min_all, pg_min_all)
-
-    return study_results, detailed_fls, line_fls
+    return devices
 
 
-def get_downstream_objects(app, site_name_map) \
-        -> tuple[dict[pft.ElmTerm:pft.ElmTerm], dict[pft.ElmTerm:pft.ElmTr2], dict[pft.ElmTerm:pft.ElmLne]]:
+def get_downstream_objects(devices):
     """
 
-    :param app:
     :param devices:
     :return:
     """
 
-    all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
-    grids = [grid for grid in all_grids if grid.outserv == 0]
-
-    devices_terminals = {}
-    devices_loads = {}
-    devices_lines = {}
-    for dictionary in site_name_map.values():
-        for key, value in dictionary.items():
-            cubicle = key
-            termination = value
-        devices_terminals[termination] = [termination]
-        devices_loads[termination] = []
-        devices_lines[termination] = []
-        # Do a topological search of the device downstream ojects
-        down_devices = cubicle.GetAll(1, 0)
-        # If the external grid is in the downstream list, you're searching in the wrong direction
-        if any(item in grids for item in down_devices):
-            ds_objs_list = cubicle.GetAll(0, 0)
-        else:
-            ds_objs_list = down_devices
-        for down_object in ds_objs_list:
-            if down_object.GetClassName() == "ElmTerm" and down_object.uknom > 1:
-                devices_terminals[termination].append(down_object)
-            if down_object.GetClassName() == "ElmTr2":
-                devices_loads[termination].append(down_object)
-            if down_object.GetClassName() == "ElmLne":
-                devices_lines[termination].append(down_object)
-
-    return devices_terminals, devices_loads, devices_lines
+    for device in devices:
+        terminals = [device.term]
+        loads = []
+        lines = []
+        down_objs = device.cubicle.GetAll()
+        for obj in down_objs:
+            if obj.GetClassName() == "ElmTerm" and obj.uknom > 1:
+                terminals.append(obj)
+            if obj.GetClassName() in ["ElmLod", "ElmTr2"]:
+                loads.append(obj)
+            if obj.GetClassName() == "ElmLne":
+                lines.append(obj)
+        device.sect_terms = terminals
+        device.sect_loads = loads
+        device.sect_lines = lines
 
 
-def us_ds_device(devices_terminals: dict[pft.ElmTerm:pft.ElmTerm]) \
-        -> tuple[dict[pft.ElmTerm:pft.ElmTerm], dict[pft.ElmTerm:pft.ElmTerm]]:
+def us_ds_device(devices):
     """
-    Update all devices with the lists of downstream devices and upstreams devices
-    :param devices_terminals:
-    :param all_devices:
+
+    :param devices:
     :return:
     """
-    us_devices = {device: [] for device in devices_terminals.keys()}
-    ds_devices = {device: [] for device in devices_terminals.keys()}
-    for device, terms in devices_terminals.items():
-        # get a dictionary of device-terms that include the device in its list of terminals
-        d_t_dic = {}
-        for other_device, other_terms in devices_terminals.items():
+
+    for device in devices:
+        us_devices = []
+        for other_device in devices:
             if other_device == device:
                 continue
-            if device in other_terms:
-                d_t_dic[other_device] = other_terms
-        # From this dictionary, the device with the shortest list of terminals is the backup device
-        if d_t_dic:
-            min_val = min([len(value) for key, value in d_t_dic.items()])
-            bu_device = False
-            for other_device, other_terms in d_t_dic.items():
-                if len(other_terms) == min_val:
-                    bu_device = other_device
-            if bu_device:
-                if bu_device not in us_devices[device]:
-                    us_devices[device].append(bu_device)
-                if device not in ds_devices[device]:
-                    ds_devices[bu_device].append(device)
-
-    return us_devices, ds_devices
+            if device.term in other_device.sect_terms:
+                us_devices.append(other_device)
+        if us_devices:
+            bu_device = min(us_devices, key=lambda item: len(item.sect_terms))
+            device.us_devices.append(bu_device)
+            bu_device.ds_devices.append(device)
 
 
-def get_ds_capacity(devices_loads: dict[pft.ElmTerm:pft.ElmTr2]) -> dict[pft.ElmTerm:float]:
+def get_ds_capacity(devices):
     """
     Calculate the capacity of all distribution transformers downstream of each device.
     """
+    def _get_load(obj):
+        return obj.Strat if obj.GetClassName() == "ElmLod" else obj.Snom_a * 1000
 
-    ds_capacity = {}
-    for device, loads in devices_loads.items():
-        load_kva = {load: round(load.Snom_a * 1000) for load in loads}
-        ds_capacity[device] = sum(load_kva.values())
-    return ds_capacity
+    for device in devices:
+        device.ds_capacity = round(sum([_get_load(obj) for obj in device.sect_loads]))
 
 
-def get_device_sections(devices_terms: dict[pft.ElmTerm:list[object]]) -> dict[pft.ElmTerm:list[object]]:
+def get_device_sections(devices):
     """
-    For a dictionary of device: [terminals],determine the device sections
-    :param devices_terminals:
+
+    :param devices:
     :return:
     """
 
-    # Sort the keys by the length of their lists in descending order
-    sorted_keys = sorted(devices_terms, key=lambda k: len(devices_terms[k]), reverse=True)
+    def _sections(devices_objs):
+        # Sort the keys by the length of their lists in descending order
+        sorted_keys = sorted(devices_objs, key=lambda k: len(devices_objs[k]), reverse=True)
+        # Iterate over the sorted keys
+        for i, key1 in enumerate(sorted_keys):
+            for key2 in sorted_keys[i + 1:]:
+                set1 = set(devices_objs[key1])
+                set2 = set(devices_objs[key2])
+                # Find common elements except the key of the shorter list (key2)
+                common_elements = set1 & set2 - {key2}
+                # Remove common elements from the longer list (key1's list)
+                devices_objs[key1] = [elem for elem in devices_objs[key1] if elem not in common_elements]
+        return devices_objs
 
-    # Iterate over the sorted keys
-    for i, key1 in enumerate(sorted_keys):
-        for key2 in sorted_keys[i + 1:]:
-            set1 = set(devices_terms[key1])
-            set2 = set(devices_terms[key2])
+    devices_terms = {device.term:device.sect_terms for device in devices}
+    devices_loads = {device.term:device.sect_loads for device in devices}
+    devices_lines = {device.term:device.sect_lines for device in devices}
 
-            # Find common elements except the key of the shorter list (key2)
-            common_elements = set1 & set2 - {key2}
+    for device in devices:
+        section_terms = _sections(devices_terms)[device.term]
+        dataclass_terms = [ds.Termination(obj, None, None, None, None) for obj in section_terms]
+        device.sect_terms = dataclass_terms
 
-            # Remove common elements from the longer list (key1's list)
-            devices_terms[key1] = [elem for elem in devices_terms[key1] if elem not in common_elements]
+        section_loads = _sections(devices_loads)[device.term]
+        dataclass_loads = [dataclass_load(obj) for obj in section_loads]
+        device.sect_loads = dataclass_loads
 
-    return devices_terms
+        section_lines = _sections(devices_lines)[device.term]
+        dataclass_lines = []
+        for elmlne in section_lines:
+            line_type, line_therm_rating = lines_results.get_conductor(elmlne)
+            dataclass_lines.append(
+                ds.Line(elmlne, None, None, None, None, line_type, line_therm_rating, None, None, None, None)
+            )
+        device.sect_lines = dataclass_lines
 
 
-def get_section_max_tr(section_loads: dict[pft.ElmTerm:pft.ElmTr2]) -> (
-        tuple)[dict[pft.ElmTerm:float], dict[pft.ElmTerm:pft.ElmTerm]]:
+def terminal_fls(devices, bound, f_type):
     """
 
-    :param app:
-    :param section_loads:
+    :param devices:
+    :param bound:
+    :param f_type:
     :return:
-    device_max_load = {'device': str, ...}
-    device_max_trs = {device.switch: [term1, term2...], ..}
     """
 
-    device_max_load = {}
-    device_max_trs = {}
-    for device, loads in section_loads.items():
-        load_values = {load: round(load.Snom_a * 1000) for load in loads}
-        if load_values.values():
-            max_load_value = max(load_values.values())
-            device_max_load[device] = max_load_value
+    def _check_att(obj, attribute):
+        if obj.HasAttribute(attribute):
+            terminal_fl = round(obj.GetAttribute(attribute) * 1000)
         else:
-            device_max_load[device] = 0
-        max_loads = [load for load in load_values if load_values[load] == max_load_value]
-        # If there are multiple max loads, need to return all of them, so we can find the max load with highest fl.
-        max_load_terms = [load.bushv.cterm for load in max_loads]
-        device_max_trs[device] = max_load_terms
+            terminal_fl = 0
+        return terminal_fl
 
-    return device_max_load, device_max_trs
+    for device in devices:
+        for terminal in device.sect_terms:
+            obj = terminal.object
+            Ia = _check_att(obj, 'm:Ikss:A')
+            Ib = _check_att(obj, 'm:Ikss:B')
+            Ic = _check_att(obj, 'm:Ikss:C')
 
-
-def terminal_fls(devices_sections: dict[pft.ElmTerm:pft.ElmTerm], f_type: str) -> dict[pft.ElmTerm:dict[pft.ElmTerm:float]]:
-    """
-
-    :param devices_sections:
-    :param f_type: 'Ground', '2 Phase', '3 Phase'
-    :return:
-    """
-
-    if f_type == "Ground":
-        attribute = 'm:Ikss:A'
-    elif f_type == '2 Phase':
-        attribute = 'm:Ikss:B'
-    else:
-        # f_type == '3 Phase'
-        attribute = 'm:Ikss'
-
-    results_all = {}
-    for device, terminals in devices_sections.items():
-        results_all[device] = {}
-        for terminal in terminals:
-            if terminal.HasAttribute(attribute):
-                results_all[device][terminal] = round(terminal.GetAttribute(attribute), 3) * 1000
+            if bound == 'Max':
+                if f_type == 'Ground':
+                    terminal.max_fl_pg = max(Ia, Ib, Ic)
+                else:
+                    terminal.max_fl_ph = max(Ia, Ib, Ic)
+            elif f_type == 'Ground':
+                terminal.min_fl_pg = max(Ia, Ib, Ic)
             else:
-                results_all[device][terminal] = 0
-
-    return results_all
+                terminal.min_fl_ph = max(Ia, Ib, Ic)
 
 
-def sect_fl_bound(results_all: dict[pft.ElmTerm:dict[pft.ElmTerm:float]], bound: str) -> dict[pft.ElmTerm:float]:
-    """
-
-    :param results_all:
-    :param bound: 'Min', 'Max'.
-    :return:
-    """
-
-    sect_bound = {}
-    for device, terms in results_all.items():
-        sect_bound[device] = {}
-        non_zero_terms = {term: fl for term, fl in terms.items() if fl != 0}
-        if not non_zero_terms:
-            sect_bound[device] = 'no terminations'
-            continue
-        if bound == 'Min':
-            min_term = min(non_zero_terms, key=non_zero_terms.get)
-            sect_bound[device] = {min_term: non_zero_terms[min_term]}
-        elif bound == 'Max':
-            max_term = max(non_zero_terms, key=non_zero_terms.get)
-            sect_bound[device] = {max_term: non_zero_terms[max_term]}
-
-    return sect_bound
-
-
-def append_floating_terms(app, results_all: dict[pft.ElmTerm:dict[pft.ElmTerm:float]],
-                          floating_terms: dict[pft.ElmTerm:dict[pft.ElmLne:float]], bound: str, f_type: str) \
-        -> dict[pft.ElmTerm:dict[pft.ElmTerm:float]]:
+def append_floating_terms(app, devices, floating_terms):
     """
 
     :param app:
-    :param results_all:
+    :param devices:
     :param floating_terms:
-    :param bound: 'Max', 'Min'
-    :param f_type: 'Ground', '2 Phase', '3 Phase'
     :return:
     """
 
-    for device, lines in floating_terms.items():
+    for dev, lines in floating_terms.items():
         for line, term in lines.items():
             if line.bus1.cterm == term:
                 ppro = 1
             else:
                 ppro = 99
-            analysis.short_circuit(app, bound, f_type, location=line, ppro=ppro)
-            line_current = analysis.get_line_current(line)
-            results_all[device].update({term: line_current})
+            termination = ds.Termination(term, None, None, None, None)
+            analysis.short_circuit(app, bound='Max', f_type='3 Phase', location=line, ppro=ppro)
+            current = analysis.get_line_current(line)
+            termination.max_fl_ph = current
+            analysis.short_circuit(app, bound='Max', f_type='Ground', location=line, ppro=ppro)
+            current = analysis.get_line_current(line)
+            termination.max_fl_pg = current
+            analysis.short_circuit(app, bound='Min', f_type='2 Phase', location=line, ppro=ppro)
+            current = analysis.get_line_current(line)
+            termination.min_fl_ph = current
+            analysis.short_circuit(app, bound='Min', f_type='Ground', location=line, ppro=ppro)
+            current = analysis.get_line_current(line)
+            termination.min_fl_pg = current
 
-    return results_all
+            sect_terms = [device.sect_terms for device in devices if device.object == dev]
+            sect_terms.append(termination)
+
+
+def update_device_data(devices):
+    """
+
+    :param devices:
+    :return:
+    """
+
+    for device in devices:
+        # Update transformer data
+        device.max_tr_size = max([load.load_kva for load in device.sect_loads])
+        max_ds_trs = [load.term for load in device.sect_loads if load.load_kva == device.max_tr_size]
+        max_ds_trs_class = [term for term in device.sect_terms if term.object in max_ds_trs]
+        device.tr_max_ph = max([term.max_fl_ph for term in device.sect_terms if term in max_ds_trs_class])
+        device.tr_max_pg = max([term.max_fl_pg for term in device.sect_terms if term in max_ds_trs_class])
+        device.max_ds_tr = [term.object.cpSubstat.loc_name for term in max_ds_trs_class if term.max_fl_pg == device.tr_max_pg][0]
+        # Update device fl data
+        device.max_fl_ph = max([term.max_fl_ph for term in device.sect_terms])
+        device.max_fl_pg = max([term.max_fl_pg for term in device.sect_terms])
+        device.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms])
+        device.min_fl_pg = min([term.min_fl_pg for term in device.sect_terms])
+
+
+# @log_arguments
+def update_line_data(devices):
+    """
+
+    :param devices:
+    :return:
+    """
+
+    for device in devices:
+        lines = device.sect_lines
+        for line in lines:
+            elmlne = line.object
+            lne_cubs = [elmlne.bus1, elmlne.bus2]
+            lne_terms = [cub.cterm for cub in lne_cubs if cub is not None]
+            sect_term_obs = [term.object for term in device.sect_terms]
+            if any(terms in sect_term_obs for terms in lne_terms):
+                line.max_fl_ph = max([term.max_fl_ph for term in device.sect_terms if term.object in lne_terms])
+                line.max_fl_pg = max([term.max_fl_pg for term in device.sect_terms if term.object in lne_terms])
+                line.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms if term.object in lne_terms])
+                line.min_fl_pg = min([term.min_fl_pg for term in device.sect_terms if term.object in lne_terms])
+            else:
+                line.max_fl_ph = 0
+                line.max_fl_pg = 0
+                line.min_fl_ph = 0
+                line.min_fl_pg = 0
+
+
+def dataclass_load(load):
+    if load.GetClassName() == "ElmLod":
+        return ds.Load(load, load.bus1.cterm, load.Strat)
+    if load.GetClassName() == "ElmTr2":
+        return ds.Load(load, load.bushv.cterm, round(load.Snom_a * 1000))
+
+
+def print_devices(app, devices):
+
+    for device in devices:
+        app.PrintPlain(f"object: {device.object}")
+        app.PrintPlain(f"cubicle: {device.cubicle}")
+        app.PrintPlain(f"term: {device.term}")
+        app.PrintPlain(f"ds_capacity: {device.ds_capacity}")
+        app.PrintPlain(f"max_fl_ph: {device.max_fl_ph}")
+        app.PrintPlain(f"max_fl_pg: {device.max_fl_pg}")
+        app.PrintPlain(f"min_fl_ph: {device.min_fl_ph}")
+        app.PrintPlain(f"min_fl_pg: {device.min_fl_pg}")
+        app.PrintPlain(f"max_ds_tr: {device.max_ds_tr}")
+        app.PrintPlain(f"max_tr_size: {device.max_tr_size}")
+        app.PrintPlain(f"tr_max_ph: {device.tr_max_ph}")
+        app.PrintPlain(f"tr_max_pg: {device.tr_max_pg}")
+        app.PrintPlain(f"sect_terms: {device.sect_terms}")
+        app.PrintPlain(f"sect_loads: {device.sect_loads}")
+        app.PrintPlain(f"sect_lines: {device.sect_lines}")
+        app.PrintPlain(f"us_devices: {device.us_devices}")
+        app.PrintPlain(f"ds_devices: {device.ds_devices}")
+

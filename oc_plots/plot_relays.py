@@ -1,12 +1,13 @@
 import math
 from devices import devices as ds
 from oc_plots import sld_plot as sld
+
 from importlib import reload
 reload(sld)
 
 def plot_all_relays(app, device_list):
 
-    app.PrintPlain("Generating device time overcurrent plots")
+    app.PrintPlain("Generating device time overcurrent plots...")
     new_format = new_page_format(app)
     study_case = app.GetActiveStudyCase()
     graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
@@ -20,16 +21,25 @@ def plot_all_relays(app, device_list):
             if device.min_fl_ph > 0:
                vipage = create_plot(app, graphics_board, device, f_type='Phase')
             # Add the single line diagram
-            new_diagram = sld.create_slf(app, vipage, device)
+            new_diagram = sld.create_slf(vipage, device)
             if new_diagram:
                 sld.update_slf(app, new_diagram, device)
+                # study_case.Activate()
+                # sld.layers(new_diagram)
+                # study_case.Deactivate()
             vipage.Close()
-            # sld.create_slf(app, vipage, device, fixpos=True)
         else:
             app.PrintPlain('No relays to plot')
-    # drawing_format(graphics_board, new_format, reset=True)
 
     study_case.Activate()
+    # study_case.Deactivate()
+    # for device in device_list:
+    #     if device.object.GetClassName() == 'ElmRelay':
+    #         relay_name = device.object.loc_name
+    #         folder_name = f"{relay_name} Coordination Plot"
+    #         vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")[0]
+    #         sld.create_slf(vipage, device, fixpos=True)
+
 
         # Save results to study folder
         # prjt = app.GetActiveProject()
@@ -41,6 +51,7 @@ def create_plot(app, graphics_board, relay, f_type: str):
 
 
     relay_name = relay.object.loc_name
+    app.PrintPlain(relay_name)
     # Create the plot graphic object
     folder_name = f"{relay_name} Coordination Plot"
     vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")
@@ -56,23 +67,23 @@ def create_plot(app, graphics_board, relay, f_type: str):
     # Add the constants to the plot
     min_fl = plot.CreateObject("VisXvalue", f'{relay_name} min fl')
     max_fl = plot.CreateObject("VisXvalue", f'{relay_name} max fl')
-    max_tr_fl = plot.CreateObject("VisXvalue", f'{relay.ds_tr_site} max fl')
+    max_tr_fl = plot.CreateObject("VisXvalue", f'{relay.max_ds_tr} max fl')
 
     if f_type == 'Ground':
         xvalue_settings(min_fl, 'PG Min FL', relay.min_fl_pg)
         xvalue_settings(max_fl, 'PG Max FL', relay.max_fl_pg)
-        xvalue_settings(max_tr_fl, 'DS TR PG Max FL', relay.ds_tr_pg)
+        xvalue_settings(max_tr_fl, 'DS TR PG Max FL', relay.tr_max_pg)
     else:
         xvalue_settings(min_fl, "Ph Min FL", relay.min_fl_ph)
         xvalue_settings(max_fl, "Ph Max FL", relay.max_fl_ph)
-        xvalue_settings(max_tr_fl, "DS TR Ph Max FL", relay.ds_tr_ph)
+        xvalue_settings(max_tr_fl, "DS TR Ph Max FL", relay.tr_max_ph)
 
     # Add all the devices to the plot
-    us_device = relay.us_device
+    us_device = [device.object for device in relay.us_devices]
     ds_fuse = ds.create_fuse(app, relay)
     if not ds_fuse:
         app.PrintPlain(
-            f'Downstream max transformer fuse size for {relay.ds_tr_site} could not be found in PowerFactory'
+            f'Downstream max transformer fuse size for {relay.max_ds_tr} could not be found in PowerFactory'
         )
     all_devices = [relay.object] + us_device + ds_fuse
 
@@ -112,7 +123,7 @@ def plot_settings(plot, relay, f_type):
     plot.x_max = x_max
     plot.x_min = x_min
     plot.x_map = 1                      # log scale
-    plot.y_max = 10
+    plot.y_max = 5
     plot.y_min = 0.01
     plot.y_map = 0                      # linear scale
     plot.y_fit = 0                      # Adapt scale
@@ -175,7 +186,7 @@ def new_page_format(app):
     return new_format
 
 
-def drawing_format(graphics_board, format_graph, reset=False):
+def drawing_format(graphics_board, format_graph):
     """
 
     :param graphics_board:
@@ -190,10 +201,6 @@ def drawing_format(graphics_board, format_graph, reset=False):
     else:
         draw_form = draw_form_list[0]
 
-    if reset:
-        draw_form.aDrwFrm = 'A4'            # Format
-        return
-
     format_graph.iSizeX = 210
     format_graph.iSizeY = 61
     format_graph.iLeft = 0
@@ -205,21 +212,36 @@ def drawing_format(graphics_board, format_graph, reset=False):
     draw_form.aDrwFrm = format_graph.loc_name     # Format
 
 
-# Deactivate study case
-# Under the SetVipage, get the "Drawing Format.SetGrfpage" object
-# change object.aDrwFrm = "210_x_61"
-# Under the SetVipage object, get the VisGrfnet object
-# set VisGrfnet.fixPos = 0
-
-
-def plot_fix(app):
+def plot_fix(app, device):
 
     study_case = app.GetActiveStudyCase()
     graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
     study_case.Deactivate()
-    folder_name = "CHTOSS-FB52-J01 Coordination Plot"
+    folder_name = f"{device} Coordination Plot"
     vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")[0]
     draw_form = vipage.GetContents("Drawing Format.SetGrfpage")[0]
     draw_form.aDrwFrm = "A4"
-    network_graphic = vipage.GetContents("CHTOSS-FB52-J01 Graphic.VisGrfnet")[0]
+    network_graphic = vipage.GetContents(f"{device} Graphic.VisGrfnet")[0]
     network_graphic.fixPos = 1
+
+
+def test_func(app):
+
+    graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
+    folder_name = "RC-1396404 Coordination Plot"
+    vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")[0]
+    network_graphic = vipage.GetContents("RC-1396404 Graphic.VisGrfnet")[0]
+    two_dev_rad = network_graphic.GetContents("2 Device Radial.IntGrfnet")[0]
+    grf_net_obj = two_dev_rad.GetContents("Graphical Net Object9.IntGrf")[0]
+    grf_con_1 = grf_net_obj.GetContents("GCO_1.IntGrfcon")[0]
+    app.PrintPlain(f"{grf_con_1.rX}")
+    app.PrintPlain(f"{grf_con_1.rY}")
+    grf_con_2 = grf_net_obj.GetContents("GCO_2.IntGrfcon")[0]
+    app.PrintPlain(f"{grf_con_2.rX}")
+    app.PrintPlain(f"{grf_con_2.rY}")
+
+
+
+
+
+

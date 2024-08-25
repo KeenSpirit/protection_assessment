@@ -1,3 +1,4 @@
+from devices import devices as ds
 
 def find_end_points(feeder: object) -> list[object]:
     """
@@ -37,24 +38,25 @@ def find_end_points(feeder: object) -> list[object]:
     return floating_lines
 
 
-def get_floating_terminals(feeder: object, devices_section: dict[object:object]) -> dict[object:dict[object:object]]:
+def get_floating_terminals(feeder, devices) -> dict[object:dict[object:object]]:
     """
     Outputs all floating terminal objects with their associated line objects for all devices
     :param feeder:
-    :param devices_section:
+    :param devices:
     :return:
     """
 
     floating_terms= {}
     floating_lines = find_end_points(feeder)
-    for device, terms in devices_section.items():
-        floating_terms[device] = {}
+    for device in devices:
+        terms = [term.object for term in device.sect_terms]
+        floating_terms[device.object] = {}
         for line in floating_lines:
             t1, t2 = line.GetConnectedElements()
             t3 = line.GetConnectedElements(1,1,0)
             if len(t3) == 1 and t3[0] == t2 and t2 in terms and t1 not in terms:
-                floating_terms[device][line] = t1
+                floating_terms[device.object ][line] = ds.Termination(t1, None, None, None, None)
             elif len(t3) == 1 and t3[0] == t1 and t1 in terms and t2 not in terms:
-                floating_terms[device][line] = t2
+                floating_terms[device.object ][line] = ds.Termination(t2, None, None, None, None)
 
     return floating_terms
