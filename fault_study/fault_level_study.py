@@ -24,7 +24,7 @@ def fault_study(app, feeder, sites):
         for site in sites
     ]
 
-    get_downstream_objects(devices)
+    get_downstream_objects(app, devices)
     us_ds_device(devices)
     get_ds_capacity(devices)
     get_device_sections(devices)
@@ -40,29 +40,62 @@ def fault_study(app, feeder, sites):
 
     floating_terms = ft.get_floating_terminals(feeder, devices)
     append_floating_terms(app, devices, floating_terms)
-    update_device_data(devices)
+    update_device_data(app, devices)
     update_line_data(devices)
-    print_devices(app, devices)
 
     return devices
 
 
-def get_downstream_objects(devices):
+def obtain_region(app):
+
+    project = app.GetActiveProject()
+    derived_proj = project.der_baseproject
+    der_proj_name = derived_proj.GetFullName()
+
+    regional_model = 'Regional Models'
+    seq_model = 'SEQ'
+
+    if regional_model in der_proj_name:
+        # This is a regional model
+        model=regional_model
+    elif seq_model in der_proj_name:
+        # This is a SEQ model
+        model = seq_model
+    else:
+        msg = (
+            "The appropriate region for the model could not be found. "
+            "Please contact the script administrator to resolve this issue."
+        )
+        raise RuntimeError(msg)
+    return model
+
+
+def get_downstream_objects(app, devices):
     """
 
     :param devices:
     :return:
     """
+    all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
+    grids = [grid for grid in all_grids if grid.outserv == 0]
 
+    region = obtain_region(app)
     for device in devices:
         terminals = [device.term]
         loads = []
         lines = []
-        down_objs = device.cubicle.GetAll()
+        down_devices = device.cubicle.GetAll(1, 0)
+        # If the external grid is in the downstream list, you're searching in the wrong direction
+        if any(item in grids for item in down_devices):
+            down_objs = device.cubicle.GetAll(0, 0)
+        else:
+            down_objs = down_devices
         for obj in down_objs:
             if obj.GetClassName() == "ElmTerm" and obj.uknom > 1:
                 terminals.append(obj)
-            if obj.GetClassName() in ["ElmLod", "ElmTr2"]:
+            if obj.GetClassName() == "ElmLod" and region == 'SEQ':
+                loads.append(obj)
+            if obj.GetClassName() == "ElmTr2" and region == 'Regional Models':
                 loads.append(obj)
             if obj.GetClassName() == "ElmLne":
                 lines.append(obj)
@@ -131,7 +164,6 @@ def get_device_sections(devices):
         section_terms = _sections(devices_terms)[device.term]
         dataclass_terms = [ds.Termination(obj, None, None, None, None) for obj in section_terms]
         device.sect_terms = dataclass_terms
-
         section_loads = _sections(devices_loads)[device.term]
         dataclass_loads = [dataclass_load(obj) for obj in section_loads]
         device.sect_loads = dataclass_loads
@@ -144,6 +176,7 @@ def get_device_sections(devices):
                 ds.Line(elmlne, None, None, None, None, line_type, line_therm_rating, None, None, None, None)
             )
         device.sect_lines = dataclass_lines
+
 
 
 def terminal_fls(devices, bound, f_type):
@@ -213,26 +246,42 @@ def append_floating_terms(app, devices, floating_terms):
             sect_terms.append(termination)
 
 
-def update_device_data(devices):
+def update_device_data(app, devices):
     """
 
     :param devices:
     :return:
     """
 
+    def _safe_max(sequence):
+        try:
+            return max(sequence)
+        except ValueError:
+            return None
+
     for device in devices:
         # Update transformer data
-        device.max_tr_size = max([load.load_kva for load in device.sect_loads])
+        try:
+            device.max_tr_size = _safe_max([load.load_kva for load in device.sect_loads])
+        except:
+            app.PrintPlain(f"device.object{device.object}")
+            app.PrintPlain(f"device.sect_loads{device.sect_loads}")
         max_ds_trs = [load.term for load in device.sect_loads if load.load_kva == device.max_tr_size]
         max_ds_trs_class = [term for term in device.sect_terms if term.object in max_ds_trs]
-        device.tr_max_ph = max([term.max_fl_ph for term in device.sect_terms if term in max_ds_trs_class])
-        device.tr_max_pg = max([term.max_fl_pg for term in device.sect_terms if term in max_ds_trs_class])
+        try:
+            device.tr_max_ph = _safe_max([term.max_fl_ph for term in device.sect_terms if term in max_ds_trs_class])
+        except:
+            app.PrintPlain(f"device.object{device.object}")
+            app.PrintPlain(f"max_ds_trs{max_ds_trs}")
+            app.PrintPlain(f"device.sect_terms{device.sect_terms}")
+            app.PrintPlain(f"max_ds_trs_class{max_ds_trs_class}")
+        device.tr_max_pg = _safe_max([term.max_fl_pg for term in device.sect_terms if term in max_ds_trs_class])
         device.max_ds_tr = [term.object.cpSubstat.loc_name for term in max_ds_trs_class if term.max_fl_pg == device.tr_max_pg][0]
         # Update device fl data
-        device.max_fl_ph = max([term.max_fl_ph for term in device.sect_terms])
-        device.max_fl_pg = max([term.max_fl_pg for term in device.sect_terms])
-        device.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms])
-        device.min_fl_pg = min([term.min_fl_pg for term in device.sect_terms])
+        device.max_fl_ph = _safe_max([term.max_fl_ph for term in device.sect_terms])
+        device.max_fl_pg = _safe_max([term.max_fl_pg for term in device.sect_terms])
+        device.min_fl_ph = _safe_max([term.min_fl_ph for term in device.sect_terms])
+        device.min_fl_pg = _safe_max([term.min_fl_pg for term in device.sect_terms])
 
 
 # @log_arguments

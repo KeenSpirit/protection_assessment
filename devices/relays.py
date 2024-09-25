@@ -118,3 +118,21 @@ def convert_to_i0(fault_current, threei0=False):
         return 3 * fault_current
     else:
         return fault_current
+
+
+def measure_type(device):
+    pass
+
+
+def get_device_trips(device):
+    """Get number of trips for each device."""
+
+    if device.GetClassName() == 'ElmRelay':
+        try:
+            reclosing_element = device.GetContents("*.RelRecl", True)[0]
+            trips = reclosing_element.GetAttribute("oplockout")
+        except IndexError:
+            trips = 1  # It's a feeder relay
+    else:
+        trips = 1  # device  is a fuse
+    return trips

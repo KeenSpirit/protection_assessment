@@ -124,3 +124,14 @@ def temporary_variation(app):
     finally:
         variation.Deactivate()
         variation.Delete()
+
+
+def create_obj(parent, obj_name: str, obj_class: str):
+
+    obj = parent.GetContents(f"{obj_name}.{obj_class}")
+
+    if not obj:
+        obj = parent.CreateObject(obj_class, obj_name)
+    else:
+        obj = obj[0]
+    return obj

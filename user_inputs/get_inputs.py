@@ -4,7 +4,6 @@ import sys
 from typing import Dict, List, Tuple, Any
 
 
-
 def loc_name(device):
 
     if device.HasAttribute("r:cpSubstat:e:loc_name"):

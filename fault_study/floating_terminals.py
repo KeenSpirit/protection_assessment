@@ -52,7 +52,10 @@ def get_floating_terminals(feeder, devices) -> dict[object:dict[object:object]]:
         terms = [term.object for term in device.sect_terms]
         floating_terms[device.object] = {}
         for line in floating_lines:
-            t1, t2 = line.GetConnectedElements()
+            try:
+                t1, t2 = line.GetConnectedElements()
+            except:
+                continue
             t3 = line.GetConnectedElements(1,1,0)
             if len(t3) == 1 and t3[0] == t2 and t2 in terms and t1 not in terms:
                 floating_terms[device.object ][line] = ds.Termination(t1, None, None, None, None)

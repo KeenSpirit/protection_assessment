@@ -15,20 +15,21 @@ def cond_damage(app, devices):
 
     for device in devices:
         dev_obj = device.object
+        trips = relays.get_device_trips(dev_obj)
         lines = device.sect_lines
         fault_type = '2-Phase'
         for line in lines:
             fl_step = 10
             min_fl_clear_times = fault_clear_times(dev_obj, line, fl_step, fault_type)
             worst_case_energy(line, min_fl_clear_times, fault_type)
-        ar.rewrite_results(app, lines, fault_type)
+        ar.rewrite_results(app, lines, fault_type, trips)
 
         fault_type = 'Phase-Ground'
         for line in lines:
             fl_step = 10
             min_fl_clear_times = fault_clear_times(dev_obj, line, fl_step, fault_type)
             worst_case_energy(line, min_fl_clear_times, fault_type)
-        ar.rewrite_results(app, lines, fault_type)
+        ar.rewrite_results(app, lines, fault_type, trips)
 
 
 
@@ -101,8 +102,9 @@ def element_trip_time(element, flt_cur):
     op_time = None
 
     if element.GetClassName() == 'RelToc':
-
         pickup = element.GetAttribute("e:cpIpset")
+        if flt_cur <= pickup:
+            return op_time
         time_dial = element.GetAttribute("e:Tpset")
         # curve characteristic
         curve_char = element.GetAttribute("e:pcharac")

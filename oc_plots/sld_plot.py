@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Dict, Tuple
 from devices import devices as ds
+from pf_protection_helper import create_obj
 
 
 def create_slf(project_folder, relay, fixpos=False):
@@ -23,7 +24,7 @@ def create_slf(project_folder, relay, fixpos=False):
         network_graphic.SetAttribute("allowInteraction", 1)
         network_graphic.SetAttribute("FrmVis", 1)
         network_graphic.SetAttribute("fixPos", 0)
-        set_fold = create_setting_fold(new_diagram)
+        set_fold = create_obj(new_diagram, "Settings", "IntFolder")
         create_format(set_fold)
     else:
         new_diagram = False
@@ -186,23 +187,9 @@ def update_slf(app, new_diagram, relay):
     _create_grfcon(int_grf, 'GCO_2', 1, 17.5, 17.5, -1.0, 96.25, 83.125, -1.0)
 
 
-def create_setting_fold(intgrfnet):
-
-    set_fold = intgrfnet.GetContents("Settings.IntFolder", True)
-    if not set_fold:
-        set_fold = intgrfnet.CreateObject("IntFolder", "Settings")
-    else:
-        set_fold = set_fold[0]
-    return set_fold
-
-
 def create_format(set_fold):
 
-    format = set_fold.GetContents("Format.SetGrfpage", True)
-    if not format:
-        format = set_fold.CreateObject("SetGrfpage", "Format")
-    else:
-        format = format[0]
+    format = create_obj(set_fold, "Format", "SetGrfpage")
     format.iDrwFrm = 0
     format.aDrwFrm = '210_x_61'
 
@@ -220,11 +207,13 @@ def _create_grfcon(int_grf, name, connr, a, b, c, d, e, f):
 
 def _create_labels(app, int_grf, x, y, vis, orient, par, box):
 
-    global_lib = app.GetGlobalLibrary()
-    form = global_lib.SearchObject(r"\System\Standard\Settings\Formats\Graphic\Label.IntFormsel")
+    currentUser = app.GetCurrentUser()
+    DB = currentUser.GetParent()
+    system = DB.GetContents("Sys.IntFolder")[0]
+    label = system.SearchObject(r"\Sys\Standard.IntPrj\Settings.SetFold\Formats.SetFoldform\Grf\Label.IntFormsel")
 
     setvitxt = int_grf.CreateObject("SetVitxt", "LabelTermStrip")
-    setvitxt.format = form
+    setvitxt.format = label
     setvitxt.ifont = 11
     setvitxt.center_x = x
     setvitxt.center_y = y
@@ -242,45 +231,17 @@ def _create_labels(app, int_grf, x, y, vis, orient, par, box):
 
 def layers(int_grf):
 
-    sites = int_grf.SearchObject(r"\Layers\Bays and Sites.IntGrflayer")
-    sites.iVis = 1
-    cts = int_grf.SearchObject(r"\Layers\Current/voltage transformers.IntGrflayer")
-    cts.iVis = 1
-    sites = int_grf.SearchObject(r"\Layers\Diagram layer.IntGrflayer")
-    sites.iVis = 1
-    sites = int_grf.SearchObject(r"\Layers\Labels.IntGrflayer")
-    sites.iVis = 1
-    sites = int_grf.SearchObject(r"\Layers\Net elements.IntGrflayer")
-    sites.iVis = 1
-    sites = int_grf.SearchObject(r"\Layers\Relays.IntGrflayer")
-    sites.iVis = 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    layers = int_grf.GetContents("Layers.IntFolder")[0]
+    bays_sites = layers.GetContents("Bays and Sites.IntGrflayer")[0]
+    bays_sites.iVis = 1
+    ct_vts = layers.GetContents("Current/voltage transformers.IntGrflayer")[0]
+    ct_vts.iVis = 1
+    labels = layers.GetContents("Labels.IntGrflayer")[0]
+    labels.iVis = 1
+    net_elms = layers.GetContents("Net elements.IntGrflayer")[0]
+    net_elms.iVis = 1
+    relays = layers.GetContents("Relays.IntGrflayer")[0]
+    relays.iVis = 1
 
 # @dataclass
 # class Node:

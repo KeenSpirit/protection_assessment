@@ -1,9 +1,10 @@
 import math
 from devices import devices as ds
 from oc_plots import sld_plot as sld
-
+from pf_protection_helper import create_obj
 from importlib import reload
 reload(sld)
+
 
 def plot_all_relays(app, device_list):
 
@@ -21,25 +22,17 @@ def plot_all_relays(app, device_list):
             if device.min_fl_ph > 0:
                vipage = create_plot(app, graphics_board, device, f_type='Phase')
             # Add the single line diagram
-            new_diagram = sld.create_slf(vipage, device)
-            if new_diagram:
-                sld.update_slf(app, new_diagram, device)
-                # study_case.Activate()
-                # sld.layers(new_diagram)
-                # study_case.Deactivate()
-            vipage.Close()
+            # new_diagram = sld.create_slf(vipage, device)
+            # if new_diagram:
+            #     sld.update_slf(app, new_diagram, device)
+            #     study_case.Activate()
+            #     sld.layers(new_diagram)
+            #     study_case.Deactivate()
+            # vipage.Close()
         else:
             app.PrintPlain('No relays to plot')
 
     study_case.Activate()
-    # study_case.Deactivate()
-    # for device in device_list:
-    #     if device.object.GetClassName() == 'ElmRelay':
-    #         relay_name = device.object.loc_name
-    #         folder_name = f"{relay_name} Coordination Plot"
-    #         vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")[0]
-    #         sld.create_slf(vipage, device, fixpos=True)
-
 
         # Save results to study folder
         # prjt = app.GetActiveProject()
@@ -47,22 +40,17 @@ def plot_all_relays(app, device_list):
         # study_folder.AddCopy(vipage, folder_name)
         # vipage.Delete()
 
-def create_plot(app, graphics_board, relay, f_type: str):
 
+def create_plot(app, graphics_board, relay, f_type: str):
 
     relay_name = relay.object.loc_name
     app.PrintPlain(relay_name)
     # Create the plot graphic object
     folder_name = f"{relay_name} Coordination Plot"
-    vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")
-    if not vipage:
-        vipage = graphics_board.CreateObject("SetVipage", folder_name)
-    else:
-        vipage = vipage[0]
+    vipage = create_obj(graphics_board, folder_name, "SetVipage")
     plot_name = f"{relay_name} {f_type} Coordination Plot"
     plot = vipage.CreateObject("VisOcplot", plot_name)
     plot.Clear()
-    plot_settings(plot, relay, f_type)
 
     # Add the constants to the plot
     min_fl = plot.CreateObject("VisXvalue", f'{relay_name} min fl')
@@ -88,19 +76,16 @@ def create_plot(app, graphics_board, relay, f_type: str):
     all_devices = [relay.object] + us_device + ds_fuse
 
     plot.AddRelays(all_devices)
+    plot_settings(plot, relay, f_type)
 
     return vipage
 
 
 def create_draw_format(vipage):
 
-    draw_format = vipage.GetContents("Drawing Format.SetGrfpage")
-    if not draw_format:
-        draw_format = vipage.CreateObject("SetGrfpage", "Drawing Format")
-    else:
-        draw_format = vipage[0]
+    draw_format = create_obj(vipage, "Drawing Format", "SetGrfpage")
     draw_format.iDrwFrm = 1
-    draw_format.aDrwFrm = '210_x_61'
+    draw_format.aDrwFrm = 'A4'
 
 
 def plot_settings(plot, relay, f_type):
@@ -116,9 +101,13 @@ def plot_settings(plot, relay, f_type):
     if f_type == 'Ground':
         x_min = _get_bound(relay.min_fl_pg, bound='Min')
         x_max = _get_bound(relay.max_fl_pg, bound='Max')
+        # Set the curve style for earth fault elements to dashed
+        plot.gStyle = [10 for _ in range(len(plot.gStyle))]
     else:
         x_min = _get_bound(relay.min_fl_ph, bound='Min')
         x_max = _get_bound(relay.max_fl_ph, bound='Max')
+
+    setocplt(plot, f_type)
 
     plot.x_max = x_max
     plot.x_min = x_min
@@ -129,13 +118,22 @@ def plot_settings(plot, relay, f_type):
     plot.y_fit = 0                      # Adapt scale
 
 
+def setocplt(plot, f_type):
+
+    settings = create_obj(plot, "Overcurrent Plot Settings", "SetOcplt")
+    if f_type == 'Ground':
+        settings.ishow = 3
+    else:
+        settings.ishow = 1
+    settings.iTbrk = 0
+
+
 def xvalue_settings(constant, name, value):
 
     constant.loc_name = name            # name
     constant.label = 1
     constant.lab_text = [name]          # line label
     constant.show = 1                   # line with intersections
-    constant.label = 0                  # line with intersections
     constant.iopt_lab= 3                # position
     constant.value= value
     constant.color = 1                  # line with intersections
@@ -172,17 +170,10 @@ def new_page_format(app):
 
     prjt = app.GetActiveProject()
     settings = prjt.GetContents('Settings.SetFold')[0]
-    formats = settings.GetContents("Page Formats.SetFoldpage")
-    if not formats:
-        formats = settings.CreateObject("SetFoldpage", "Page Formats")
-    else:
-        formats = formats[0]
+    formats = create_obj(settings, "Page Formats", "SetFoldpage")
     new_format_name = '210_x_61'
-    new_format = formats.GetContents(f"{new_format_name}.SetFormat")
-    if not new_format:
-        new_format = formats.CreateObject("SetFormat", new_format_name)
-    else:
-        return new_format[0]
+    new_format = create_obj(formats, new_format_name, "SetFormat")
+
     return new_format
 
 
@@ -195,34 +186,34 @@ def drawing_format(graphics_board, format_graph):
     :return:
     """
 
-    draw_form_list = graphics_board.GetContents("Drawing Format.SetGrfpage")
-    if not draw_form_list:
-        draw_form = graphics_board.CreateObject("SetGrfpage", "Drawing Format")
-    else:
-        draw_form = draw_form_list[0]
-
+    draw_form = create_obj(graphics_board, "Drawing Format", "SetGrfpage")
     format_graph.iSizeX = 210
     format_graph.iSizeY = 61
     format_graph.iLeft = 0
     format_graph.iRight = 0
     format_graph.iTop = 0
     format_graph.iBottom = 0
-
     draw_form.iDrwFrm = 1           # 0 = Portrait, 1 = Landscape
     draw_form.aDrwFrm = format_graph.loc_name     # Format
 
 
-def plot_fix(app, device):
+def plot_fix(app, user_selection):
 
+    relay_list = []
+    for feeders, devices in user_selection.items():
+        for device in devices:
+            if device.GetClassName() == 'ElmRelay':
+                relay_list.append(device.loc_name)
     study_case = app.GetActiveStudyCase()
     graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
     study_case.Deactivate()
-    folder_name = f"{device} Coordination Plot"
-    vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")[0]
-    draw_form = vipage.GetContents("Drawing Format.SetGrfpage")[0]
-    draw_form.aDrwFrm = "A4"
-    network_graphic = vipage.GetContents(f"{device} Graphic.VisGrfnet")[0]
-    network_graphic.fixPos = 1
+    for relay in relay_list:
+        folder_name = f"{relay} Coordination Plot"
+        vipage = graphics_board.GetContents(f"{folder_name}.SetVipage")[0]
+        draw_form = vipage.GetContents("Drawing Format.SetGrfpage")[0]
+        draw_form.aDrwFrm = "A4"
+        network_graphic = vipage.GetContents(f"{relay} Graphic.VisGrfnet")[0]
+        network_graphic.fixPos = 1
 
 
 def test_func(app):
@@ -239,6 +230,11 @@ def test_func(app):
     grf_con_2 = grf_net_obj.GetContents("GCO_2.IntGrfcon")[0]
     app.PrintPlain(f"{grf_con_2.rX}")
     app.PrintPlain(f"{grf_con_2.rY}")
+
+
+
+
+
 
 
 
