@@ -22,7 +22,7 @@ def rewrite_results(app, lines, fault_type, trips):
             clear_time = line.pg_clear_time
             dpl_num = "dpl2"
         try:
-            allowable_fl = line.thermal_rating / (math.sqrt(clear_time) * (trips + 1))
+            allowable_fl = line.thermal_rating / (math.sqrt(clear_time * trips))
             if fault_level < allowable_fl:
                 # No conductor damage
                 line.object.SetAttribute(f"e:{dpl_num}", 2)
@@ -49,7 +49,7 @@ def cond_damage_results(devices):
 
     def _allowable_fl(thermal_rating, clear_time, trips):
         try:
-            allowable_fl = round(thermal_rating / (math.sqrt(clear_time) * (trips + 1)))
+            allowable_fl = round(thermal_rating / (math.sqrt(clear_time * trips)))
         except:
             allowable_fl = None
         return allowable_fl

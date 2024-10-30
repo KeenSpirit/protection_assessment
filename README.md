@@ -11,7 +11,7 @@ Creates the following files under the active study case for a given selection of
 - Protection section single line diagram*
 - Protection section audit
 
-A conductor damange assessment is visible in the graphical interface by setting feeder colour scheme to User-Defined/{fault type}.
+A conductor damange assessment is visible in the graphical interface by setting the feeder colour scheme to User-Defined/{fault type}.
 
 All protection devices (elmrelay and elmfuse) must be correctly connected and configured for the script to work correctly.
 
