@@ -1,3 +1,5 @@
+# import math
+from fault_study import fault_impedance
 
 def get_prot_elements(device):
     """ Get all of the time overcurrent and instantneous overcurrent
@@ -25,12 +27,12 @@ def get_active_elements(elements, fault_type: str):
 
     active_elements = []
     for element in elements:
-        element_type = element.typ_id
+        element_type = element.typ_id.atype
         if fault_type == 'Phase-Ground':
             # all elements are active
             active_elements.append(element)
         elif fault_type == '2-Phase':
-            if element_type in negative_sequence_type or phase_type:
+            if element_type in negative_sequence_type or element_type in phase_type:
                 # Only negative sequence and phase elements are active
                 active_elements.append(element)
         elif fault_type == '3-Phase':
@@ -39,6 +41,124 @@ def get_active_elements(elements, fault_type: str):
                 active_elements.append(element)
 
     return active_elements
+
+
+# def device_pickup(device, fault_type: str):
+#     """
+#     Obtain the device pickup for the given fault type
+#     fault_type: 'Phase-Ground', '2-Phase', '3-Phase'
+#     """
+#
+#     if device.GetClassName() == 'ElmRelay':
+#         elements = get_prot_elements(device)
+#         active_elements = get_active_elements(elements, fault_type)
+#
+#         minimum_pickup = 9999
+#         for element in active_elements:
+#             if element.GetClassName() == 'RelToc':
+#                 pickup = element.GetAttribute("e:cpIpset")
+#             elif element.GetClassName() == 'RelIoc':
+#                 pickup = element.GetAttribute("e:cpIpset")
+#             else:
+#                 pickup = 9999
+#             if pickup < minimum_pickup:
+#                 minimum_pickup = pickup
+#         return minimum_pickup
+#     else:
+#         # Device is a fuse
+#         pickup = device.irat * 2
+#     return minimum_pickup
+
+
+def determine_pickup_values(device_pf):
+    """The values returned from this function will be used to calculate the
+    reach factor."""
+    # If the devices is a fuse then it will have a known size. A fuse factor
+    # of two will be applied
+    if device_pf.GetClassName() == "RelFuse":
+        fuse_size = int(device_pf.GetAttribute("r:typ_id:e:irat"))
+        setting_values = [fuse_size * 2, fuse_size * 2, 0]
+        return setting_values
+    # It has been assumed that only IDMT elements will be used to reach for
+    # Phase and earth faults.
+    idmt_elements = [
+        idmt_element
+        for idmt_element in device_pf.GetContents("*.RelToc", True)
+        if not idmt_element.GetAttribute("e:outserv")
+    ]
+    # idmt_elements =  device_pf.GetContents('*.RelToc', True)
+    # app.PrintInfo(f"relay = {device_pf}, Element = {idmt_elements}")
+    # Determine the OC pickup
+    oc_idmt_elements = [
+        oc_idmt_element
+        for oc_idmt_element in idmt_elements
+        if oc_idmt_element.GetAttribute("r:typ_id:e:sfiec") == "I>t"
+        if "definite" not in oc_idmt_element.pcharac.loc_name.lower()
+    ]
+    # Not all devices use IDMT elements. If a relay does not have a configured
+    # IDMT then look to include the INST element to perform reach.
+    if not oc_idmt_elements:
+        oc_idmt_elements = [
+            oc_inst_element
+            for oc_inst_element in device_pf.GetContents("*.RelIoc", True)
+            if oc_inst_element.GetAttribute("r:typ_id:e:sfiec") == "I>>"
+            if not oc_inst_element.IsOutOfService()
+            if oc_inst_element.GetAttribute("r:typ_id:e:irecltarget")
+        ]
+    # Select the largest pickup. This is assuming you can have multiple pickups
+    # and one trip is dependent on this particular setting
+    highest_oc_pickup = 0
+    for oc_idmt_element in oc_idmt_elements:
+        pickup = oc_idmt_element.GetAttribute("e:cpIpset")
+        if pickup > highest_oc_pickup:
+            highest_oc_pickup = pickup
+    # Determine the EF pickup
+    ef_idmt_elements = [
+        ef_idmt_element
+        for ef_idmt_element in idmt_elements
+        if ef_idmt_element.GetAttribute("r:typ_id:e:sfiec") == "IE>t"
+        if "definite" not in ef_idmt_element.pcharac.loc_name.lower()
+    ]
+    if not ef_idmt_elements:
+        ef_idmt_elements = [
+            ef_inst_element
+            for ef_inst_element in device_pf.GetContents("*.RelIoc", True)
+            if ef_inst_element.GetAttribute("r:typ_id:e:sfiec") == "IE>>"
+            if not ef_inst_element.IsOutOfService()
+            if ef_inst_element.GetAttribute("r:typ_id:e:irecltarget")
+        ]
+    # Select the largest pickup. This is assuming you can have multiple pickups
+    # and one trip is dependent on this particular setting
+    highest_ef_pickup = 0
+    for ef_idmt_element in ef_idmt_elements:
+        pickup = ef_idmt_element.GetAttribute("e:cpIpset")
+        if pickup > highest_ef_pickup:
+            highest_ef_pickup = pickup
+    # Determine the NPS pickup
+    nps_idmt_elements = [
+        nps_idmt_element
+        for nps_idmt_element in idmt_elements
+        if nps_idmt_element.GetAttribute("r:typ_id:e:sfiec") == "I2>t"
+    ]
+    nps_inst_elements = [
+        nps_inst_element
+        for nps_inst_element in device_pf.GetContents("*.RelIoc", True)
+        if nps_inst_element.GetAttribute("r:typ_id:e:sfiec") == "I2>>"
+        if nps_inst_element.GetAttribute("r:typ_id:e:irecltarget")
+        if not nps_inst_element.IsOutOfService()
+    ]
+    nps_elements = nps_idmt_elements + nps_inst_elements
+    # Select the largest pickup. This is assuming you can have multiple pickups
+    # and one trip is dependent on this particular setting
+    highest_nps_pickup = 0
+    for nps_idmt_element in nps_elements:
+        pickup = nps_idmt_element.GetAttribute("e:cpIpset")
+        if pickup > highest_nps_pickup:
+            highest_nps_pickup = pickup
+    if highest_nps_pickup > 0.1:
+        highest_nps_pickup = 0
+    setting_values = [round(highest_oc_pickup), round(highest_ef_pickup), round(highest_nps_pickup)]
+    return setting_values
 
 
 def get_fuse_current(fuse):
@@ -136,3 +256,93 @@ def get_device_trips(device):
     else:
         trips = 1  # device  is a fuse
     return trips
+
+
+def device_reach_factors(region, device):
+    """
+
+    :param device:
+    :return:
+    """
+
+    # PRIMARY PICKUPS
+    ef_pickup = determine_pickup_values(device.object)[1]
+    ph_pickup = determine_pickup_values(device.object)[0]
+    nps_pickup = determine_pickup_values(device.object)[2]
+    # PRIMARY REACH FACTORS
+    if ef_pickup and ef_pickup > 0:
+        ef_rf = [round(fault_impedance.term_pg_fl(region, term) / ef_pickup, 2) for term in device.sect_terms]
+    else:
+        ef_rf = ['NA'] * len(device.sect_terms)
+    if ph_pickup and ph_pickup > 0:
+        ph_rf = [round(term.min_fl_ph / ph_pickup, 2) for term in device.sect_terms]
+    else:
+        ph_rf = ['NA'] * len(device.sect_terms)
+    if nps_pickup and nps_pickup > 0:
+        nps_ef_rf = [round(fault_impedance.term_pg_fl(region, term)/3 / nps_pickup, 2) for term in device.sect_terms]
+        nps_ph_rf = [round(term.min_fl_ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
+    else:
+        nps_ef_rf = ['NA'] * len(device.sect_terms)
+        nps_ph_rf = ['NA'] * len(device.sect_terms)
+
+    # BACK-UP PICKUPS
+    if device.us_devices:
+        # Obtain the lowest pickup setting of all bu devices
+        bu_devices = device.us_devices
+        bu_ef_pickup = None
+        bu_ph_pickup = None
+        bu_nps_pickup = None
+        for bu_device in bu_devices:
+            bu_ef_pickup_bu_device = determine_pickup_values(bu_device.object)[1]
+            bu_ph_pickup_bu_device = determine_pickup_values(bu_device.object)[0]
+            bu_nps_pickup_bu_device = determine_pickup_values(bu_device.object)[2]
+            if not bu_ef_pickup or (bu_ef_pickup and bu_ef_pickup_bu_device < bu_ef_pickup):
+                bu_ef_pickup = bu_ef_pickup_bu_device
+            if not bu_ph_pickup or (bu_ph_pickup and bu_ph_pickup_bu_device < bu_ph_pickup):
+                bu_ph_pickup = bu_ph_pickup_bu_device
+            if not bu_nps_pickup or (bu_nps_pickup and bu_nps_pickup_bu_device < bu_nps_pickup):
+                bu_nps_pickup = bu_nps_pickup_bu_device
+        # BACK-UP REACH FACTORS
+        if bu_ef_pickup and bu_ef_pickup > 0:
+            bu_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / bu_ef_pickup, 2) for term in device.sect_terms]
+        else:
+            bu_ef_rf = ['NA'] * len(device.sect_terms)
+        if bu_ph_pickup and bu_ph_pickup > 0:
+            bu_ph_rf = [round(term.min_fl_ph / bu_ph_pickup, 2) for term in device.sect_terms]
+        else:
+            bu_ph_rf = ['NA'] * len(device.sect_terms)
+        if bu_nps_pickup and bu_nps_pickup > 0:
+            bu_nps_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / 3 / bu_nps_pickup, 2) for term in
+                         device.sect_terms]
+            bu_nps_ph_rf = [round(term.min_fl_ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]
+        else:
+            bu_nps_ef_rf = ['NA'] * len(device.sect_terms)
+            bu_nps_ph_rf = ['NA'] * len(device.sect_terms)
+    else:
+        # NO BACK-UP
+        bu_device = None
+        bu_ef_pickup = 'NA'
+        bu_ph_pickup = 'NA'
+        bu_nps_pickup = 'NA'
+        bu_ef_rf = ['NA'] * len(device.sect_terms)
+        bu_ph_rf = ['NA'] * len(device.sect_terms)
+        bu_nps_ef_rf = ['NA'] * len(device.sect_terms)
+        bu_nps_ph_rf = ['NA'] * len(device.sect_terms)
+
+    device_reach_factors = {
+        'ef_pickup' : [ef_pickup] * len(device.sect_terms),
+        'ph_pickup' : [ph_pickup] * len(device.sect_terms),
+        'nps_pickup' : [nps_pickup] * len(device.sect_terms),
+        'ef_rf' : ef_rf,
+        'ph_rf' : ph_rf,
+        'nps_ef_rf' : nps_ef_rf,
+        'nps_ph_rf' : nps_ph_rf,
+        'bu_ef_pickup' : [bu_ef_pickup] * len(device.sect_terms),
+        'bu_ph_pickup' : [bu_ph_pickup] * len(device.sect_terms),
+        'bu_nps_pickup' : [bu_nps_pickup] * len(device.sect_terms),
+        'bu_ef_rf' : bu_ef_rf,
+        'bu_ph_rf' : bu_ph_rf,
+        'bu_nps_ef_rf' : bu_nps_ef_rf,
+        'bu_nps_ph_rf' : bu_nps_ph_rf
+    }
+    return device_reach_factors

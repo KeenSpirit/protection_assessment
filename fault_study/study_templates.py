@@ -146,6 +146,41 @@ class MinGroundShortCircuit:
     Xf: float = 0
 
 
+@dataclass
+class MinGroundShortCircuitZ10:
+    iopt_mde: int = SCMethod.Complete
+    iopt_shc: str = FaultType.Single_Phase_to_Ground
+    iopt_cur: int = Calculate.Minimum
+    i_pspgf: int = 0
+    iopt_cnf: bool = False
+    ildfinit: bool = False
+    cfac_full: float = 1.0
+    iIgnLoad: bool = True
+    iIgnLneCap: bool = True
+    iIgnShnt: bool = True
+    iopt_prot: int = 1
+    iIksForProt: int = ProtTrippingCurrent.Transient
+    Rf: float = 10
+    Xf: float = 0
+
+
+@dataclass
+class MinGroundShortCircuitZ50:
+    iopt_mde: int = SCMethod.Complete
+    iopt_shc: str = FaultType.Single_Phase_to_Ground
+    iopt_cur: int = Calculate.Minimum
+    i_pspgf: int = 0
+    iopt_cnf: bool = False
+    ildfinit: bool = False
+    cfac_full: float = 1.0
+    iIgnLoad: bool = True
+    iIgnLneCap: bool = True
+    iIgnShnt: bool = True
+    iopt_prot: int = 1
+    iIksForProt: int = ProtTrippingCurrent.Transient
+    Rf: float = 50
+    Xf: float = 0
+
 def apply_sc(ComShc, Format, Type):
     """
     Set all the attributes in the ComSch module to the values in the
@@ -173,9 +208,15 @@ def apply_sc(ComShc, Format, Type):
         elif Type == '2 Phase':
             for field in Min2PhaseShortCircuit.__dataclass_fields__:
                 ComShc.SetAttribute(field, getattr(Min2PhaseShortCircuit, field))
-        else:
+        elif Type == 'Ground':
             for field in MinGroundShortCircuit.__dataclass_fields__:
                 ComShc.SetAttribute(field, getattr(MinGroundShortCircuit, field))
+        elif Type == 'Ground Z10':
+            for field in MinGroundShortCircuitZ10.__dataclass_fields__:
+                ComShc.SetAttribute(field, getattr(MinGroundShortCircuitZ10, field))
+        else:
+            for field in MinGroundShortCircuitZ50.__dataclass_fields__:
+                ComShc.SetAttribute(field, getattr(MinGroundShortCircuitZ50, field))
 
 
 @dataclass

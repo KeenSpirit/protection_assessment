@@ -112,9 +112,9 @@ class FaultLevelStudy:
     def main(self, region: str) -> Tuple[Dict, Dict, Dict]:
         radial_list = self.mesh_feeder_check()
         feeder_list, external_grid = self.feeders_external_grid(radial_list)
-        feeders_devices = self.get_feeders_devices(feeder_list)
+        feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
         user_selection = self.run_window(feeder_list, feeders_devices, region)
-        return feeders_devices, user_selection, external_grid
+        return feeders_devices, bu_devices, user_selection, external_grid
 
     def mesh_feeder_check(self) -> List[str]:
         self.app.PrintPlain("Checking for mesh feeders...")
@@ -301,10 +301,11 @@ class FaultLevelStudy:
         return self.feeders_external_grid(radial_list)
 
     def get_feeders_devices(self, radial_list: List[str]) -> Dict[str, List[Any]]:
-        """Get active relays and fuses. """
+        """Get active relays and fuses.
+        Map them to corresponding external grid or feeder using a dictionary"""
         # Relays belong in the network model project folder.
         net_mod = self.app.GetProjectFolder("netmod")
-        # Filter for for relays under network model recursively.
+        # Filter for relays under network model recursively.
         all_relays = net_mod.GetContents("*.ElmRelay", True)
         relays = [
             relay
@@ -329,13 +330,19 @@ class FaultLevelStudy:
         ]
         devices = relays + fuses
 
-        device_object_dict = {feeder: [] for feeder in radial_list}
+        feeder_device_dict = {feeder: [] for feeder in radial_list}
+        grid_device_dict = {grid: [] for grid in self.app.GetCalcRelevantObjects('*.ElmXnet')}
         for device in devices:
             term = device.cbranch
             feeder = [feeder for feeder in radial_list if term in self.app.GetCalcRelevantObjects(feeder + ".ElmFeeder")[0].GetAll()]
             if feeder:
-                device_object_dict[feeder[0]].append(device)
-        return device_object_dict
+                feeder_device_dict[feeder[0]].append(device)
+                continue
+            for grid in grid_device_dict:
+                if grid.bus1.cterm == device.cn_bus:
+                    grid_device_dict[grid].append(device)
+                    break
+        return feeder_device_dict, grid_device_dict
 
     def populate(self, frame, feeder_list, feeders_switches, region):
         if region == 'Regional Models':

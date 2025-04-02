@@ -92,10 +92,14 @@ class Line:
 @dataclass
 class Termination:
     object: object
+    constr: str
     max_fl_ph: float
     max_fl_pg: float
     min_fl_ph: float
     min_fl_pg: float
+    min_fl_pg10: float
+    min_fl_pg50: float
+
 
 
 @dataclass

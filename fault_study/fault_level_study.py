@@ -2,14 +2,14 @@ import sys
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
 import powerfactorytyping as pft
 from devices import devices as ds
-from fault_study import lines_results, analysis, floating_terminals as ft
+from fault_study import lines_results, analysis, fault_impedance, floating_terminals as ft
 from logging_config.configure_logging import log_arguments
 
 from importlib import reload
 reload(ft)
+reload(fault_impedance)
 
-
-def fault_study(app, feeder, sites):
+def fault_study(app, region, feeder, bu_devices, devices):
     """
 
     :param app:
@@ -19,13 +19,9 @@ def fault_study(app, feeder, sites):
     """
 
     app.PrintPlain("Performing fault level study...")
-    devices = [
-        ds.Device(site,site.fold_id,site.fold_id.cterm,None,None,None,None,None,None,None,None,None,[],[],[],[],[])
-        for site in sites
-    ]
 
     get_downstream_objects(app, devices)
-    us_ds_device(devices)
+    us_ds_device(devices, bu_devices)
     get_ds_capacity(devices)
     get_device_sections(devices)
 
@@ -37,10 +33,15 @@ def fault_study(app, feeder, sites):
     terminal_fls(devices, bound='Min', f_type='Ground')
     analysis.short_circuit(app, bound='Min', f_type='2 Phase')
     terminal_fls(devices, bound='Min', f_type='2 Phase')
+    analysis.short_circuit(app, bound='Min', f_type='Ground Z10')
+    terminal_fls(devices, bound='Min', f_type='Ground Z10')
+    analysis.short_circuit(app, bound='Min', f_type='Ground Z50')
+    terminal_fls(devices, bound='Min', f_type='Ground Z50')
+    fault_impedance.update_node_construction(devices)
 
     floating_terms = ft.get_floating_terminals(feeder, devices)
     append_floating_terms(app, devices, floating_terms)
-    update_device_data(app, devices)
+    update_device_data(app, region, devices)
     update_line_data(devices)
 
     return devices
@@ -57,17 +58,17 @@ def obtain_region(app):
 
     if regional_model in der_proj_name:
         # This is a regional model
-        model=regional_model
+        region=regional_model
     elif seq_model in der_proj_name:
         # This is a SEQ model
-        model = seq_model
+        region = seq_model
     else:
         msg = (
             "The appropriate region for the model could not be found. "
             "Please contact the script administrator to resolve this issue."
         )
         raise RuntimeError(msg)
-    return model
+    return region
 
 
 def get_downstream_objects(app, devices):
@@ -104,7 +105,7 @@ def get_downstream_objects(app, devices):
         device.sect_lines = lines
 
 
-def us_ds_device(devices):
+def us_ds_device(devices, bu_devices):
     """
 
     :param devices:
@@ -122,6 +123,11 @@ def us_ds_device(devices):
             bu_device = min(us_devices, key=lambda item: len(item.sect_terms))
             device.us_devices.append(bu_device)
             bu_device.ds_devices.append(device)
+        if not device.us_devices:
+            connected_elements = device.cubicle.GetAll(1, 0) + device.cubicle.GetAll(0, 0)
+            for grid, grid_devices in bu_devices.items():
+                if grid in connected_elements:
+                    device.us_devices.extend(grid_devices)
 
 
 def get_ds_capacity(devices):
@@ -162,7 +168,7 @@ def get_device_sections(devices):
 
     for device in devices:
         section_terms = _sections(devices_terms)[device.term]
-        dataclass_terms = [ds.Termination(obj, None, None, None, None) for obj in section_terms]
+        dataclass_terms = [ds.Termination(obj, None, None, None, None, None, None, None) for obj in section_terms]
         device.sect_terms = dataclass_terms
         section_loads = _sections(devices_loads)[device.term]
         dataclass_loads = [dataclass_load(obj) for obj in section_loads]
@@ -209,6 +215,10 @@ def terminal_fls(devices, bound, f_type):
                     terminal.max_fl_ph = max(Ia, Ib, Ic)
             elif f_type == 'Ground':
                 terminal.min_fl_pg = max(Ia, Ib, Ic)
+            elif f_type == 'Ground Z10':
+                terminal.min_fl_pg10 = max(Ia, Ib, Ic)
+            elif f_type == 'Ground Z50':
+                terminal.min_fl_pg50 = max(Ia, Ib, Ic)
             else:
                 terminal.min_fl_ph = max(Ia, Ib, Ic)
 
@@ -228,7 +238,7 @@ def append_floating_terms(app, devices, floating_terms):
                 ppro = 1
             else:
                 ppro = 99
-            termination = ds.Termination(term, None, None, None, None)
+            termination = ds.Termination(term, None, None, None, None, None, None, None)
             analysis.short_circuit(app, bound='Max', f_type='3 Phase', location=line, ppro=ppro)
             current = analysis.get_line_current(line)
             termination.max_fl_ph = current
@@ -241,12 +251,18 @@ def append_floating_terms(app, devices, floating_terms):
             analysis.short_circuit(app, bound='Min', f_type='Ground', location=line, ppro=ppro)
             current = analysis.get_line_current(line)
             termination.min_fl_pg = current
+            analysis.short_circuit(app, bound='Min', f_type='Ground Z10', location=line, ppro=ppro)
+            current = analysis.get_line_current(line)
+            termination.min_fl_pg10 = current
+            analysis.short_circuit(app, bound='Min', f_type='Ground Z50', location=line, ppro=ppro)
+            current = analysis.get_line_current(line)
+            termination.min_fl_pg50 = current
 
             sect_terms = [device.sect_terms for device in devices if device.object == dev]
             sect_terms.append(termination)
 
 
-def update_device_data(app, devices):
+def update_device_data(app, region, devices):
     """
 
     :param devices:
@@ -256,6 +272,12 @@ def update_device_data(app, devices):
     def _safe_max(sequence):
         try:
             return max(sequence)
+        except ValueError:
+            return None
+
+    def _safe_min(sequence):
+        try:
+            return min(sequence)
         except ValueError:
             return None
 
@@ -276,12 +298,14 @@ def update_device_data(app, devices):
             app.PrintPlain(f"device.sect_terms{device.sect_terms}")
             app.PrintPlain(f"max_ds_trs_class{max_ds_trs_class}")
         device.tr_max_pg = _safe_max([term.max_fl_pg for term in device.sect_terms if term in max_ds_trs_class])
-        device.max_ds_tr = [term.object.cpSubstat.loc_name for term in max_ds_trs_class if term.max_fl_pg == device.tr_max_pg][0]
+        device.max_ds_tr = \
+            [term.object.cpSubstat.loc_name for term in max_ds_trs_class if term.max_fl_pg == device.tr_max_pg][0]
         # Update device fl data
         device.max_fl_ph = _safe_max([term.max_fl_ph for term in device.sect_terms])
         device.max_fl_pg = _safe_max([term.max_fl_pg for term in device.sect_terms])
-        device.min_fl_ph = _safe_max([term.min_fl_ph for term in device.sect_terms])
-        device.min_fl_pg = _safe_max([term.min_fl_pg for term in device.sect_terms])
+        device.min_fl_ph = _safe_min([term.min_fl_ph for term in device.sect_terms if term.min_fl_ph > 0])
+        device.min_fl_pg = (
+            _safe_min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.min_fl_ph > 0]))
 
 
 # @log_arguments
@@ -319,6 +343,7 @@ def dataclass_load(load):
 
 
 def print_devices(app, devices):
+    """ Function used for debugging purposes only"""
 
     for device in devices:
         app.PrintPlain(f"object: {device.object}")

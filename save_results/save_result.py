@@ -2,19 +2,35 @@ from pathlib import Path
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 import sys
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
 import powerfactorytyping as pft
 from cond_damage import apply_results as ar
+from fault_study import fault_impedance
+from devices import relays
+from importlib import reload
+reload(fault_impedance)
+reload(relays)
 
-
-def save_dataframe(app, grid_data, all_fault_studies):
+def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
     """ saves the dataframe in the user directory.
     If the user is connected through citrix, the file should
     be saved local users PowerFactoryResults folder
     """
+
     import os
     import time
+    project = app.GetActiveProject()
+    derived_proj = project.der_baseproject
+    try:
+        der_proj_name = derived_proj.GetFullName()
+    except AttributeError:
+        der_proj_name = project.loc_name
+    try:
+        project_version = project.der_baseversion
+    except AttributeError:
+        project_version = 'NA'
 
     app.PrintPlain("Saving Fault Level Study...")
     date_string = time.strftime("%Y%m%d-%H%M%S")
@@ -30,18 +46,40 @@ def save_dataframe(app, grid_data, all_fault_studies):
     filepath = os.path.join(clientpath, filename)
 
     grid_data_df = pd.DataFrame(grid_data)
-    fault_studies_pd = format_fl_results(all_fault_studies)
+    fault_studies_pd = format_fl_results(region, all_fault_studies)
+
+    if region == 'SEQ':
+        oh_z = '0'
+        ug_z = '0'
+    else:
+        oh_z = '50'
+        ug_z = '10'
+
+    variations = app.GetActiveNetworkVariations()
 
     with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
         # General Information sheet
-        grid_data_df.to_excel(writer, sheet_name='General Information', startrow=9, index=False)
         workbook = writer.book
+        grid_data_df.to_excel(writer, sheet_name='General Information', startrow=21, index=False)
         worksheet = workbook['General Information']
         worksheet['A1'] = app.GetActiveStudyCase().loc_name
         worksheet['A2'] = "Fault Level Study"
         worksheet['A4'] = 'Script Run Date'
         worksheet['A5'] = date_string
-        worksheet['A8'] = 'External Grid Data:'
+        worksheet['A6'] = 'Base Project:'
+        worksheet['A7'] = der_proj_name
+        worksheet['A8'] = 'Used Version:'
+        worksheet['A9'] = project_version.loc_name
+        worksheet['A10'] = 'Fault Calculation Method: complete'
+        worksheet['A12'] = 'Maximum Fault Level Study Parameters:'
+        worksheet['A13'] = 'Conductor Temperature: 20 deg C'
+        worksheet['A14'] = 'Voltage c factor 1.1'
+        worksheet['A15'] = 'Minimum Fault Levels Study Parameters:'
+        worksheet['A16'] = 'Conductor Temperature: Individual annealing temperature'
+        worksheet['A17'] = 'Voltage c factor 1.0'
+        worksheet['A18'] = f'Minimum phase-ground fault resistance for overhead lines set to {oh_z} ohms'
+        worksheet['A19'] = f'Minimum phase-ground fault resistance for underground lines set to {ug_z} ohms'
+        worksheet['A21'] = 'External Grid Data:'
 
         i = 0
         for feeder, key in fault_studies_pd.items():
@@ -55,14 +93,24 @@ def save_dataframe(app, grid_data, all_fault_studies):
 
             # Detailed Fault Levels sheet
             for j, device in enumerate(dfls_list):
-                count = (j + 1) * 6 - 6
-                device.to_excel(writer, sheet_name=feeder, startrow=0, startcol=count, index=False)
+                count = (j + 1) * 20 - 20
+                if j == 0:
+                    device_name = device.columns[1]
+                else:
+                    device_name = device.columns[1]
+                device.to_excel(writer, sheet_name=feeder, startrow=1, startcol=count, index=False)
+                sheet = workbook[feeder]
+                start_col_letter = get_column_letter(count+1)
+                sheet[f"{start_col_letter}1"].font = Font(size=11, bold=True)
+                sheet[f"{start_col_letter}1"] = f'Primary protection: {device_name}'
+
 
             # Conductor Damage Results
-            devices = all_fault_studies[feeder]
-            cond_damage_df = ar.cond_damage_results(devices)
-            sheet_name = feeder + " Cond Dmg Res"
-            cond_damage_df.to_excel(writer, sheet_name=sheet_name, startrow=0, index=False)
+            if 'Conductor Damage Assessment' in study_selections:
+                devices = all_fault_studies[feeder]
+                cond_damage_df = ar.cond_damage_results(devices)
+                sheet_name = feeder + " Cond Dmg Res"
+                cond_damage_df.to_excel(writer, sheet_name=sheet_name, startrow=0, index=False)
 
     app.PrintPlain("Adjusting column widths...")
     wb = load_workbook(filepath)
@@ -73,16 +121,17 @@ def save_dataframe(app, grid_data, all_fault_studies):
     for feeder in fault_studies_pd:
         ws = wb[feeder]
         adjust_col_width(ws)
-        sheet_name = feeder + " Cond Dmg Res"
-        ws = wb[sheet_name]
-        adjust_col_width(ws)
+        if 'Conductor Damage Assessment' in study_selections:
+            sheet_name = feeder + " Cond Dmg Res"
+            ws = wb[sheet_name]
+            adjust_col_width(ws)
 
     # Save the adjusted workbook
     wb.save(filepath)
     app.PrintPlain("Output file saved to " + filepath)
 
 
-def format_fl_results(all_fault_studies):
+def format_fl_results(region, all_fault_studies):
     """
 
     :param grid_data:
@@ -93,7 +142,7 @@ def format_fl_results(all_fault_studies):
     fault_studies_pd = {}
     for feeder, devices in all_fault_studies.items():
         study_results_df = format_study_results(devices)
-        dfls_list = format_detailed_results(devices)
+        dfls_list = format_detailed_results(region, devices)
 
         fault_studies_pd[feeder] = [study_results_df, dfls_list]
 
@@ -134,27 +183,44 @@ def format_study_results(devices):
     return study_results_df
 
 
-def format_detailed_results(devices):
+def format_detailed_results(region, devices):
     """
 
     :param devices:
     :return:
     """
-
     dfls_list = []
     for device in devices:
+        device_reach_factors = relays.device_reach_factors(region, device)
         df = pd.DataFrame({
                 device.object.loc_name: [term.object.loc_name for term in device.sect_terms],
+            # FAULT LEVELS
                 'Max PG fault': [term.max_fl_pg for term in device.sect_terms],
                 'Max 3P fault': [term.max_fl_ph for term in device.sect_terms],
-                'Min PG fault': [term.min_fl_pg for term in device.sect_terms],
-                'Min 2P fault': [term.min_fl_ph for term in device.sect_terms]
+                'Min PG fault': [fault_impedance.term_pg_fl(region, term) for term in device.sect_terms],
+                'Min 2P fault': [term.min_fl_ph for term in device.sect_terms],
+            # PICKUPS
+                'EF PRI PU': device_reach_factors['ef_pickup'],
+                'EF BU PU': device_reach_factors['bu_ef_pickup'],
+                'PH PRI PU': device_reach_factors['ph_pickup'],
+                'PH BU PU': device_reach_factors['bu_ph_pickup'],
+                'NPS PRI PU': device_reach_factors['nps_pickup'],
+                'NPS BU PU': device_reach_factors['bu_nps_pickup'],
+            # REACH FACTORS
+                'EF PRI RF': device_reach_factors['ef_rf'],
+                'EF BU RF': device_reach_factors['bu_ef_rf'],
+                'PH PRI RF': device_reach_factors['ph_rf'],
+                'PH BU RF': device_reach_factors['bu_ph_rf'],
+                'NPS EF PRI RF': device_reach_factors['nps_ef_rf'],
+                'NPS EF BU RF': device_reach_factors['bu_nps_ef_rf'],
+                'NPS PH PRI RF': device_reach_factors['nps_ph_rf'],
+                'NPS PH BU RF': device_reach_factors['bu_nps_ph_rf']
             })
         # Sort fault levels by Max PG fault
         df_sorted = df.sort_values(by=df.columns[1], ascending=False)
         df_sorted.insert(0, 'Tfmr Size (kVA)', '')
 
-        tr_dict = {load.term.loc_name:load.load_kva for load in device.sect_loads}
+        tr_dict = {load.term.loc_name:round(load.load_kva) for load in device.sect_loads}
         df_sorted['Tfmr Size (kVA)'] = df_sorted[device.object.loc_name].map(tr_dict).fillna('')
 
         dfls_list.append(df_sorted)
@@ -210,3 +276,4 @@ def adjust_col_width(ws):
         # Set the column width to the maximum length found
         adjusted_width = (max_length + 2)
         ws.column_dimensions[column].width = adjusted_width
+

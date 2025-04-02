@@ -37,7 +37,7 @@ def fuse_clear_time(fuse, flt_cur):
     """
     For a given fault current, use fuse element setting attributes
     to calculate the fault clear time.
-    Interpolates linearly between a list of (fault level-total clear time)
+    Interpolates linearly between a list of [fault level-total clear time]
     values representing a hermite polynomial
     :param fuse: RelFuse element
     :param flt_cur: float, integer: fault current (A)

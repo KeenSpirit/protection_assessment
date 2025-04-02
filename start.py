@@ -33,15 +33,17 @@ def main(app):
     :return:
     """
 
-    model = fs.obtain_region(app)
+    region = fs.obtain_region(app)
 
     # with temporary_variation(app):
     study_selections = ss.get_study_selections(app)
-    feeders_devices, user_selection, _ = gi.get_input(app, model)
+    feeders_devices, bu_devices, user_selection, _ = gi.get_input(app, region)
+    feeders_devices = convert_to_dataclass(feeders_devices)
+    bu_devices = convert_to_dataclass(bu_devices)
     all_fault_studies = {}
-    for feeder, sites in feeders_devices.items():
+    for feeder, devices in feeders_devices.items():
         feeder_obj = app.GetCalcRelevantObjects(feeder + ".ElmFeeder")[0]
-        devices = fs.fault_study(app, feeder_obj, sites)
+        devices = fs.fault_study(app, region, feeder_obj, bu_devices, devices)
         selected_devices = [device for device in devices if device.object in user_selection[feeder]]
         if 'Conductor Damage Assessment' in study_selections:
             cd.cond_damage(app, selected_devices)
@@ -51,12 +53,25 @@ def main(app):
             pa.audit_all_relays(app, selected_devices)
         all_fault_studies[feeder] = devices
     gen_info = gi.get_grid_data(app)
-    sr.save_dataframe(app, gen_info, all_fault_studies)
+    sr.save_dataframe(app, region, study_selections, gen_info, all_fault_studies)
 
     # fix relay plots
     # if 'Protection Relay Coordination Plot' in study_selections:
     #     time.sleep(2)
     #     pr.plot_fix(app, user_selection)
+
+
+def convert_to_dataclass(dictionary):
+
+    new_dictionary = {}
+    for key, value in dictionary.items():
+        new_dictionary[key] = [
+        ds.Device(
+            object,object.fold_id,object.fold_id.cterm,None,None,None,None,None,None,None,None,None,[],[],[],[],[]
+            )
+        for object in value
+        ]
+    return new_dictionary
 
 
 if __name__ == '__main__':
