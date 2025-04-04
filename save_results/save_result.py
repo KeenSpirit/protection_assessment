@@ -35,6 +35,7 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
     app.PrintPlain("Saving Fault Level Study...")
     date_string = time.strftime("%Y%m%d-%H%M%S")
     filename = 'Fault Study Results ' + app.GetActiveStudyCase().loc_name + ' ' + date_string + '.xlsx'
+    filename = fix_string(filename)
 
     user = Path.home().name
     basepath = Path('//client/c$/LocalData') / user
@@ -88,7 +89,7 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
             study_results.to_excel(writer, sheet_name='Study Results', startrow=i+1, index=False)
             sheet = workbook['Study Results']
             sheet[f'A{i+1}'].font = Font(size=11, bold=True)
-            sheet[f'A{i+1}'] = feeder
+            sheet[f'A{i+1}'] = fix_string(feeder)
             i += 15
 
             # Detailed Fault Levels sheet
@@ -251,6 +252,20 @@ def format_devices() -> dict[str:list]:
     }
 
     return device_list
+
+
+def fix_string(file_name):
+    """
+    Excel does not allow special characters in file names. Remove any such cases and replace with a '_'
+    :param file_name: string
+    :return:
+    """
+    forbidden_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
+    file_name_list = list(file_name)
+    for i in range (len(file_name_list)):
+        if file_name_list[i] in forbidden_chars:
+            file_name_list[i] = '_'
+    return ''.join(file_name_list)
 
 
 def adjust_col_width(ws):
