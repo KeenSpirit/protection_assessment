@@ -268,17 +268,29 @@ def device_reach_factors(region, device):
     # PRIMARY PICKUPS
     ef_pickup = determine_pickup_values(device.object)[1]
     ph_pickup = determine_pickup_values(device.object)[0]
+    effective_ef_pickup = min(ef_pickup, ph_pickup)
     nps_pickup = determine_pickup_values(device.object)[2]
+
+    # Phase elements can see earth faults
+    if ef_pickup > 0 and ph_pickup > 0:
+        effective_ef_pickup = min(ef_pickup, ph_pickup)
+    elif ph_pickup > 0:
+        effective_ef_pickup = ph_pickup
+    elif ef_pickup > 0:
+        effective_ef_pickup = ef_pickup
+    else:
+        effective_ef_pickup = 0
+
     # PRIMARY REACH FACTORS
-    if ef_pickup and ef_pickup > 0:
-        ef_rf = [round(fault_impedance.term_pg_fl(region, term) / ef_pickup, 2) for term in device.sect_terms]
+    if effective_ef_pickup > 0:
+        ef_rf = [round(fault_impedance.term_pg_fl(region, term) / effective_ef_pickup, 2) for term in device.sect_terms]
     else:
         ef_rf = ['NA'] * len(device.sect_terms)
-    if ph_pickup and ph_pickup > 0:
+    if ph_pickup > 0:
         ph_rf = [round(term.min_fl_ph / ph_pickup, 2) for term in device.sect_terms]
     else:
         ph_rf = ['NA'] * len(device.sect_terms)
-    if nps_pickup and nps_pickup > 0:
+    if nps_pickup > 0:
         nps_ef_rf = [round(fault_impedance.term_pg_fl(region, term)/3 / nps_pickup, 2) for term in device.sect_terms]
         nps_ph_rf = [round(term.min_fl_ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
     else:
@@ -302,16 +314,27 @@ def device_reach_factors(region, device):
                 bu_ph_pickup = bu_ph_pickup_bu_device
             if not bu_nps_pickup or (bu_nps_pickup and bu_nps_pickup_bu_device < bu_nps_pickup):
                 bu_nps_pickup = bu_nps_pickup_bu_device
+
+        # Phase elements can see earth faults
+        if bu_ef_pickup > 0 and bu_ph_pickup > 0:
+            effective_bu_ef_pickup = min(bu_ef_pickup, bu_ph_pickup)
+        elif bu_ph_pickup > 0:
+            effective_bu_ef_pickup = bu_ph_pickup
+        elif bu_ef_pickup > 0:
+            effective_bu_ef_pickup = bu_ef_pickup
+        else:
+            effective_bu_ef_pickup = 0
+
         # BACK-UP REACH FACTORS
-        if bu_ef_pickup and bu_ef_pickup > 0:
-            bu_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / bu_ef_pickup, 2) for term in device.sect_terms]
+        if effective_bu_ef_pickup > 0:
+            bu_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / effective_bu_ef_pickup, 2) for term in device.sect_terms]
         else:
             bu_ef_rf = ['NA'] * len(device.sect_terms)
-        if bu_ph_pickup and bu_ph_pickup > 0:
+        if bu_ph_pickup > 0:
             bu_ph_rf = [round(term.min_fl_ph / bu_ph_pickup, 2) for term in device.sect_terms]
         else:
             bu_ph_rf = ['NA'] * len(device.sect_terms)
-        if bu_nps_pickup and bu_nps_pickup > 0:
+        if bu_nps_pickup > 0:
             bu_nps_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / 3 / bu_nps_pickup, 2) for term in
                          device.sect_terms]
             bu_nps_ph_rf = [round(term.min_fl_ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]

@@ -29,6 +29,8 @@ def fault_study(app, region, feeder, bu_devices, devices):
     terminal_fls(devices, bound='Max', f_type='Ground')
     analysis.short_circuit(app, bound='Max', f_type='3 Phase')
     terminal_fls(devices, bound='Max', f_type='3 Phase')
+    analysis.short_circuit(app, bound='Max', f_type='2 Phase')
+    terminal_fls(devices, bound='Max', f_type='2 Phase')
     analysis.short_circuit(app, bound='Min', f_type='Ground')
     terminal_fls(devices, bound='Min', f_type='Ground')
     analysis.short_circuit(app, bound='Min', f_type='2 Phase')
@@ -211,6 +213,8 @@ def terminal_fls(devices, bound, f_type):
             if bound == 'Max':
                 if f_type == 'Ground':
                     terminal.max_fl_pg = max(Ia, Ib, Ic)
+                elif terminal.max_fl_ph:
+                    terminal.max_fl_ph = max(terminal.max_fl_ph, max(Ia, Ib, Ic))
                 else:
                     terminal.max_fl_ph = max(Ia, Ib, Ic)
             elif f_type == 'Ground':
@@ -273,13 +277,13 @@ def update_device_data(app, region, devices):
         try:
             return max(sequence)
         except ValueError:
-            return None
+            return 0
 
     def _safe_min(sequence):
         try:
             return min(sequence)
         except ValueError:
-            return None
+            return 0
 
     for device in devices:
         # Update transformer data
@@ -305,7 +309,7 @@ def update_device_data(app, region, devices):
         device.max_fl_pg = _safe_max([term.max_fl_pg for term in device.sect_terms])
         device.min_fl_ph = _safe_min([term.min_fl_ph for term in device.sect_terms if term.min_fl_ph > 0])
         device.min_fl_pg = (
-            _safe_min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.min_fl_ph > 0]))
+            _safe_min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.min_fl_pg > 0]))
 
 
 # @log_arguments

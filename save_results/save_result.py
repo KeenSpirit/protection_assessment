@@ -197,7 +197,7 @@ def format_detailed_results(region, devices):
                 device.object.loc_name: [term.object.loc_name for term in device.sect_terms],
             # FAULT LEVELS
                 'Max PG fault': [term.max_fl_pg for term in device.sect_terms],
-                'Max 3P fault': [term.max_fl_ph for term in device.sect_terms],
+                'Max PH fault': [term.max_fl_ph for term in device.sect_terms],
                 'Min PG fault': [fault_impedance.term_pg_fl(region, term) for term in device.sect_terms],
                 'Min 2P fault': [term.min_fl_ph for term in device.sect_terms],
             # PICKUPS
