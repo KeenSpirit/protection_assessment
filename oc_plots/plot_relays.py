@@ -112,19 +112,20 @@ def plot_settings(plot, relay, f_type):
     plot.x_max = x_max
     plot.x_min = x_min
     plot.x_map = 1                      # log scale
-    plot.y_max = 5
+    plot.y_max = 10
     plot.y_min = 0.01
-    plot.y_map = 0                      # linear scale
+    plot.y_map = 1                     # log scale
     plot.y_fit = 0                      # Adapt scale
 
 
 def setocplt(plot, f_type):
 
     settings = create_obj(plot, "Overcurrent Plot Settings", "SetOcplt")
+    settings.unit = 0       # Show primary current
     if f_type == 'Ground':
-        settings.ishow = 3
+        settings.ishow = 2  # Phase and Earth Realys
     else:
-        settings.ishow = 1
+        settings.ishow = 1  # Phase Relays
     settings.iTbrk = 0
 
 

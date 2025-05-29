@@ -1,5 +1,3 @@
-from devices import devices as ds
-
 
 def get_floating_terminals(feeder, devices) -> dict[object:dict[object:object]]:
     """
@@ -21,9 +19,9 @@ def get_floating_terminals(feeder, devices) -> dict[object:dict[object:object]]:
                 continue
             t3 = line.GetConnectedElements(1,1,0)
             if len(t3) == 1 and t3[0] == t2 and t2 in terms and t1 not in terms:
-                floating_terms[device.object ][line] = ds.Termination(t1, None, None, None, None, None, None, None)
+                floating_terms[device.object][line] = t1
             elif len(t3) == 1 and t3[0] == t1 and t1 in terms and t2 not in terms:
-                floating_terms[device.object ][line] = ds.Termination(t2, None, None, None, None, None, None, None)
+                floating_terms[device.object][line] = t2
 
     return floating_terms
 

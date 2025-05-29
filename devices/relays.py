@@ -1,4 +1,4 @@
-# import math
+import math
 from fault_study import fault_impedance
 
 def get_prot_elements(device):
@@ -178,7 +178,7 @@ def get_measured_current(element, fault_level, fault_type):
     if MeasurementType in ['3ph', 'd3m']:  # 3 phase current
         return fault_level
     elif MeasurementType in ['3I0', 'S3I0']:  # Earth current & sensitive earth current
-        return convert_to_i0(fault_level, threei0=True)
+        return convert_to_i0(fault_level, threei0=False)
     elif MeasurementType in ['I0', '1ph']:  # Zero seq current & 1 phase current
         return fault_level
     elif MeasurementType in ['d1m']:  # 1 phase current
@@ -268,7 +268,6 @@ def device_reach_factors(region, device):
     # PRIMARY PICKUPS
     ef_pickup = determine_pickup_values(device.object)[1]
     ph_pickup = determine_pickup_values(device.object)[0]
-    effective_ef_pickup = min(ef_pickup, ph_pickup)
     nps_pickup = determine_pickup_values(device.object)[2]
 
     # Phase elements can see earth faults
@@ -283,7 +282,15 @@ def device_reach_factors(region, device):
 
     # PRIMARY REACH FACTORS
     if effective_ef_pickup > 0:
-        ef_rf = [round(fault_impedance.term_pg_fl(region, term) / effective_ef_pickup, 2) for term in device.sect_terms]
+        ef_rf = []
+        for term in device.sect_terms:
+            term_fl_pg = fault_impedance.term_pg_fl(region, term)
+            device_fl = swer_transform(device, term, term_fl_pg)
+            if device_fl != term_fl_pg:
+                # device is seeing 2P fault current from a 1P SWER term
+                ef_rf.append(round(device_fl / ph_pickup, 2))
+            else:
+                ef_rf.append(round(device_fl / effective_ef_pickup, 2))
     else:
         ef_rf = ['NA'] * len(device.sect_terms)
     if ph_pickup > 0:
@@ -291,7 +298,16 @@ def device_reach_factors(region, device):
     else:
         ph_rf = ['NA'] * len(device.sect_terms)
     if nps_pickup > 0:
-        nps_ef_rf = [round(fault_impedance.term_pg_fl(region, term)/3 / nps_pickup, 2) for term in device.sect_terms]
+        nps_ef_rf = []
+        for term in device.sect_terms:
+            term_fl_pg = fault_impedance.term_pg_fl(region, term)
+            device_fl = swer_transform(device, term, term_fl_pg)
+            if  device_fl == term_fl_pg:
+                # There is no SWER, the device sees earth fault
+                nps_ef_rf.append(round(device_fl / 3 / nps_pickup, 2))
+            else:
+                # There is SWER, the device sees 2 phase fault current
+                nps_ef_rf.append(round(device_fl / math.sqrt(3) / nps_pickup, 2))
         nps_ph_rf = [round(term.min_fl_ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
     else:
         nps_ef_rf = ['NA'] * len(device.sect_terms)
@@ -327,7 +343,15 @@ def device_reach_factors(region, device):
 
         # BACK-UP REACH FACTORS
         if effective_bu_ef_pickup > 0:
-            bu_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / effective_bu_ef_pickup, 2) for term in device.sect_terms]
+            bu_ef_rf = []
+            for term in device.sect_terms:
+                term_fl_pg = fault_impedance.term_pg_fl(region, term)
+                bu_device_fl = swer_transform(bu_devices[0], term, term_fl_pg)
+                if bu_device_fl != term_fl_pg:
+                    # device is seeing 2P fault current from a 1P SWER term
+                    bu_ef_rf.append(round(bu_device_fl / bu_ph_pickup, 2))
+                else:
+                    bu_ef_rf.append(round(bu_device_fl / effective_bu_ef_pickup, 2))
         else:
             bu_ef_rf = ['NA'] * len(device.sect_terms)
         if bu_ph_pickup > 0:
@@ -335,8 +359,16 @@ def device_reach_factors(region, device):
         else:
             bu_ph_rf = ['NA'] * len(device.sect_terms)
         if bu_nps_pickup > 0:
-            bu_nps_ef_rf = [round(fault_impedance.term_pg_fl(region, term) / 3 / bu_nps_pickup, 2) for term in
-                         device.sect_terms]
+            bu_nps_ef_rf = []
+            for term in device.sect_terms:
+                term_fl_pg = fault_impedance.term_pg_fl(region, term)
+                bu_device_fl = swer_transform(bu_devices[0], term, term_fl_pg)
+                if bu_device_fl == term_fl_pg:
+                    # There is no SWER, the device sees earth fault
+                    bu_nps_ef_rf.append(round(bu_device_fl / 3 / bu_nps_pickup, 2))
+                else:
+                    # There is SWER, the device sees 2 phase fault current
+                    bu_nps_ef_rf.append(round(bu_device_fl / math.sqrt(3) / bu_nps_pickup, 2))
             bu_nps_ph_rf = [round(term.min_fl_ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]
         else:
             bu_nps_ef_rf = ['NA'] * len(device.sect_terms)
@@ -369,3 +401,20 @@ def device_reach_factors(region, device):
         'bu_nps_ph_rf' : bu_nps_ph_rf
     }
     return device_reach_factors
+
+
+def swer_transform(device, term, term_fl_pg):
+    """
+    The fault level seen by the device depends on any voltage and phase transformations that occur between the device
+    and the fault.
+    Currently, this function handles single phase SWER only.
+    :param device:
+    :param term:
+    :return:
+    """
+
+    if term.l_l_volts != device.l_l_volts and term.phases == 1 and device.phases > 1:
+        device_fl = (term.l_l_volts * term_fl_pg / device.l_l_volts) / math.sqrt(3)
+    else:
+        device_fl = term_fl_pg
+    return device_fl

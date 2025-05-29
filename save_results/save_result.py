@@ -65,7 +65,7 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
         worksheet = workbook['General Information']
         worksheet['A1'] = app.GetActiveStudyCase().loc_name
         worksheet['A2'] = "Fault Level Study"
-        worksheet['A4'] = 'Script Run Date'
+        worksheet['A4'] = 'Script Run Date-Time'
         worksheet['A5'] = date_string
         worksheet['A6'] = 'Base Project:'
         worksheet['A7'] = der_proj_name
@@ -94,7 +94,7 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
 
             # Detailed Fault Levels sheet
             for j, device in enumerate(dfls_list):
-                count = (j + 1) * 20 - 20
+                count = (j + 1) * 23 - 23
                 if j == 0:
                     device_name = device.columns[1]
                 else:
@@ -163,6 +163,8 @@ def format_study_results(devices):
         ds_device_names = [device.object.loc_name for device in device.ds_devices]
         us_device_names = [device.object.loc_name for device in device.us_devices]
         device_list[device.object.loc_name] = [
+            round(device.l_l_volts),
+            round(device.phases),
             round(device.ds_capacity),
             round(device.max_fl_ph),
             round(device.max_fl_pg),
@@ -170,8 +172,8 @@ def format_study_results(devices):
             round(device.min_fl_pg),
             device.max_ds_tr,
             round(device.max_tr_size),
-            round(device.tr_max_pg),
             round(device.tr_max_ph),
+            round(device.tr_max_pg),
             ', '.join(ds_device_names),
             ', '.join(us_device_names),
 
@@ -195,6 +197,10 @@ def format_detailed_results(region, devices):
         device_reach_factors = relays.device_reach_factors(region, device)
         df = pd.DataFrame({
                 device.object.loc_name: [term.object.loc_name for term in device.sect_terms],
+            # Data
+                'Construction': [term.constr for term in device.sect_terms],
+                'L-L Voltage': [term.l_l_volts for term in device.sect_terms],
+                'No. Phases': [term.phases for term in device.sect_terms],
             # FAULT LEVELS
                 'Max PG fault': [term.max_fl_pg for term in device.sect_terms],
                 'Max PH fault': [term.max_fl_ph for term in device.sect_terms],
@@ -218,7 +224,7 @@ def format_detailed_results(region, devices):
                 'NPS PH BU RF': device_reach_factors['bu_nps_ph_rf']
             })
         # Sort fault levels by Max PG fault
-        df_sorted = df.sort_values(by=df.columns[1], ascending=False)
+        df_sorted = df.sort_values(by=df.columns[4], ascending=False)
         df_sorted.insert(0, 'Tfmr Size (kVA)', '')
 
         tr_dict = {load.term.loc_name:round(load.load_kva) for load in device.sect_loads}
@@ -237,6 +243,8 @@ def format_devices() -> dict[str:list]:
     device_list = {
         'Site Name':
             [
+                'L-L Voltage (kV)',
+                'No. Phases',
                 'DS capacity  (kVA)',
                 'Max Ph FL',
                 'Max PG FL',

@@ -19,11 +19,13 @@ def get_study_selections(app):
     root.title("Distribution Protection Assessment")
 
     # Configure window dimensions and position
-    window_width = 615
-    window_height = 450
+    width = 615
+    height = 500
     screen_width = root.winfo_screenwidth()
-    screen_x_position = (screen_width - window_width) // 2
-    root.geometry(f"{window_width}x{window_height}+{screen_x_position}+300")
+    screen_height = root.winfo_screenheight()
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+    root.geometry(f"{width}x{height}+{x}+{y}")
     root.resizable(False, True)
 
     # Apply a modern theme if available
@@ -33,26 +35,9 @@ def get_study_selections(app):
     except tk.TclError:
         pass  # Continue with default theme if custom theme isn't available
 
-    # Create main frame with scrolling capability
+    # Create main frame
     main_frame = ttk.Frame(root)
     main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-    # Create canvas for scrolling
-    canvas = tk.Canvas(main_frame)
-    scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
-    scrollable_frame = ttk.Frame(canvas)
-
-    scrollable_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
-
-    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
-
-    # Pack scrolling components
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
 
     # Study choices available for selection
     studies = [
@@ -63,7 +48,7 @@ def get_study_selections(app):
     ]
 
     # Study variables and GUI elements
-    study_vars = create_ui_elements(scrollable_frame, studies)
+    study_vars = create_ui_elements(main_frame, studies)
 
     # Add buttons frame at the bottom
     button_frame = ttk.Frame(root)
@@ -169,12 +154,13 @@ def create_ui_elements(parent, studies):
     user_id = os.environ.get("USERNAME", "user")
 
     info_text = f"""
-Fault Study results and Conductor Damage Assessment results 
-are stored at the following location:
+All protection devices must be correctly configured prior to running the script.
+
+Fault Study results and Conductor Damage Assessment results are stored at the following location:
 
 C:\\LocalData\\{user_id}\\
 
-For documentation, refer to Job Aid XXXX.
+For script documentation, refer to Job Aid XXXX.
     """
 
     info_label = ttk.Label(info_frame, text=info_text, justify="left")

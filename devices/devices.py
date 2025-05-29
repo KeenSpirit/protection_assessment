@@ -58,6 +58,8 @@ class Device:
     object: object
     cubicle: object
     term: object
+    phases: int
+    l_l_volts: float
     ds_capacity: float
     max_fl_ph: float
     max_fl_pg: float
@@ -93,6 +95,8 @@ class Line:
 class Termination:
     object: object
     constr: str
+    phases: int
+    l_l_volts: float
     max_fl_ph: float
     max_fl_pg: float
     min_fl_ph: float

@@ -28,6 +28,7 @@ def cond_damage(app, devices):
         for line in lines:
             fl_step = 10
             min_fl_clear_times = fault_clear_times(dev_obj, line, fl_step, fault_type)
+
             worst_case_energy(line, min_fl_clear_times, fault_type)
         ar.rewrite_results(app, lines, fault_type, trips)
 
@@ -88,6 +89,100 @@ def fuse_clear_time(fuse, flt_cur):
         # Unhandled curve type
         return op_time
     return op_time
+
+
+def worst_case_energy(line, min_fl_clear_times,fault_type):
+    """
+    line: [min_fl, max_fl]
+    Input: min_fl_op_times = {fl_1: trip_time_1, fl_2: trip_time_2...}
+    Output: [fault level, operating time] that corresponded
+    to worst case energy for the line
+    """
+
+    max_energy = float('-inf')
+    max_pair = [None, None]
+
+    for fl, clear_time in min_fl_clear_times.items():
+        if clear_time is None:
+            continue
+        energy = fl ** 2 * clear_time
+        if energy > max_energy:
+            max_energy = energy
+            max_pair = [fl, clear_time]
+
+    if fault_type in ['2-Phase', '3-Phase']:
+        line.ph_fl = max_pair[0]
+        line.ph_clear_time = max_pair[1]
+    else:
+        line.pg_fl = max_pair[0]
+        line.pg_clear_time = max_pair[1]
+
+
+def fault_clear_times(device, line, fl_step, fault_type):
+    """
+
+    :param app:
+    :param device:
+    :param line:
+    :param fl_step:
+    :param fault_type: 'Phase-Ground', '2-Phase', '3-Phase'
+    :return: dictionary {
+    fl_1: trip_time_1, fl_2: trip_time_2...}
+    """
+
+    if fault_type in ['2-Phase', '3-Phase']:
+        min_fl = line.min_fl_ph
+        max_fl = line.max_fl_ph
+    else:
+        min_fl = line.min_fl_pg
+        max_fl = line.max_fl_pg
+
+    # Create a list of fault levels in the interval of min and max fault
+    # currents. Two intervals may be assessed:
+    # fl_interval_1 is composed of equidistant step sizes between
+    # min fault level and max fault level
+    # fl_interval_2 is composed of only the element hisets between
+    # min fault level and max fault level
+
+    fl_interval_1 = range(min_fl, max_fl + 1, fl_step)
+    # Initialise fl_interval_2
+    fl_interval_2 = [min_fl, max_fl]
+
+    # Select only the elements capable of detecting the fault type
+    # and enabled for the current auto-reclose iteration
+    if device.GetClassName() == 'RelFuse':
+        active_elements = [device]
+    else:
+        elements = relays.get_prot_elements(device)
+        active_elements = relays.get_active_elements(elements, fault_type)
+        hisets = [
+            element.GetAttribute("e:cpIpset") - 1 for element in active_elements
+                  if element.GetClassName() == 'RelIoc']
+        fl_interval_2 = fl_interval_2 + hisets
+
+    # Initialise fault level:min operating time dictionary
+    min_fl_clear_times = {fault_level: None for fault_level in fl_interval_1}
+    for element in active_elements:
+        for fault_level in fl_interval_1:
+            # Calculate protection operate time for element and fl
+            if element.GetClassName() == 'RelFuse':
+                operate_time = fuse_clear_time(element, fault_level)
+                switch_operate_time = 0
+            else:
+                element_current = relays.get_measured_current(
+                    element, fault_level, fault_type)
+                operate_time = element_trip_time(element, element_current)
+                switch_operate_time = 0.05
+            if not operate_time or operate_time <= 0:
+                continue
+            clear_time = operate_time + switch_operate_time
+            # If this is the minimum fault clear time for that fault level,
+            # update the dictionary accordingly
+            if (min_fl_clear_times[fault_level] is None
+                    or clear_time < min_fl_clear_times[fault_level]):
+                min_fl_clear_times[fault_level] = round(clear_time, 3)
+
+    return min_fl_clear_times
 
 
 def element_trip_time(element, flt_cur):
@@ -211,97 +306,3 @@ def element_trip_time(element, flt_cur):
             op_time = min_time
 
     return op_time
-
-
-def worst_case_energy(line, min_fl_clear_times,fault_type):
-    """
-    line: [min_fl, max_fl]
-    Input: min_fl_op_times = {fl_1: trip_time_1, fl_2: trip_time_2...}
-    Output: [fault level, operating time] that corresponded
-    to worst case energy for the line
-    """
-
-    max_energy = float('-inf')
-    max_pair = [None, None]
-
-    for fl, clear_time in min_fl_clear_times.items():
-        if clear_time is None:
-            continue
-        energy = fl ** 2 * clear_time
-        if energy > max_energy:
-            max_energy = energy
-            max_pair = [fl, clear_time]
-
-    if fault_type in ['2-Phase', '3-Phase']:
-        line.ph_fl = max_pair[0]
-        line.ph_clear_time = max_pair[1]
-    else:
-        line.pg_fl = max_pair[0]
-        line.pg_clear_time = max_pair[1]
-
-
-def fault_clear_times(device, line, fl_step, fault_type):
-    """
-
-    :param app:
-    :param device:
-    :param line:
-    :param fl_step:
-    :param fault_type: 'Phase-Ground', '2-Phase', '3-Phase'
-    :return: dictionary {
-    fl_1: trip_time_1, fl_2: trip_time_2...}
-    """
-
-    if fault_type in ['2-Phase', '3-Phase']:
-        min_fl = line.min_fl_ph
-        max_fl = line.max_fl_ph
-    else:
-        min_fl = line.min_fl_pg
-        max_fl = line.max_fl_pg
-
-    # Create a list of fault levels in the interval of min and max fault
-    # currents. Two intervals may be assessed:
-    # fl_interval_1 is composed of equidistant step sizes between
-    # min fault level and max fault level
-    # fl_interval_2 is composed of only the element hisets between
-    # min fault level and max fault level
-
-    fl_interval_1 = range(min_fl, max_fl + 1, fl_step)
-    # Initialise fl_interval_2
-    fl_interval_2 = [min_fl, max_fl]
-
-    # Select only the elements capable of detecting the fault type
-    # and enabled for the current auto-reclose iteration
-    if device.GetClassName() == 'RelFuse':
-        active_elements = [device]
-    else:
-        elements = relays.get_prot_elements(device)
-        active_elements = relays.get_active_elements(elements, fault_type)
-        hisets = [
-            element.GetAttribute("e:cpIpset") - 1 for element in active_elements
-                  if element.GetClassName() == 'RelIoc']
-        fl_interval_2 = fl_interval_2 + hisets
-
-    # Initialise fault level:min operating time dictionary
-    min_fl_clear_times = {fault_level: None for fault_level in fl_interval_1}
-    for element in active_elements:
-        for fault_level in fl_interval_1:
-            # Calculate protection operate time for element and fl
-            if element.GetClassName() == 'RelFuse':
-                operate_time = fuse_clear_time(element, fault_level)
-                switch_operate_time = 0
-            else:
-                element_current = relays.get_measured_current(
-                    element, fault_level, fault_type)
-                operate_time = element_trip_time(element, element_current)
-                switch_operate_time = 0.05
-            if not operate_time or operate_time <= 0:
-                continue
-            clear_time = operate_time + switch_operate_time
-            # If this is the minimum fault clear time for that fault level,
-            # update the dictionary accordingly
-            if (min_fl_clear_times[fault_level] is None
-                    or clear_time < min_fl_clear_times[fault_level]):
-                min_fl_clear_times[fault_level] = round(clear_time, 3)
-
-    return min_fl_clear_times

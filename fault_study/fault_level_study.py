@@ -99,7 +99,9 @@ def get_downstream_objects(app, devices):
             if obj.GetClassName() == "ElmLod" and region == 'SEQ':
                 loads.append(obj)
             if obj.GetClassName() == "ElmTr2" and region == 'Regional Models':
-                loads.append(obj)
+                load_type = obj.typ_id
+                if "Regulators" not in load_type.GetFullName():
+                    loads.append(obj)
             if obj.GetClassName() == "ElmLne":
                 lines.append(obj)
         device.sect_terms = terminals
@@ -170,7 +172,9 @@ def get_device_sections(devices):
 
     for device in devices:
         section_terms = _sections(devices_terms)[device.term]
-        dataclass_terms = [ds.Termination(obj, None, None, None, None, None, None, None) for obj in section_terms]
+        dataclass_terms = [ds.Termination(
+            obj, None, ph_attr_lookup(obj.phtech), round(obj.uknom,2), None, None, None, None, None, None
+        ) for obj in section_terms]
         device.sect_terms = dataclass_terms
         section_loads = _sections(devices_loads)[device.term]
         dataclass_loads = [dataclass_load(obj) for obj in section_loads]
@@ -181,7 +185,8 @@ def get_device_sections(devices):
         for elmlne in section_lines:
             line_type, line_therm_rating = lines_results.get_conductor(elmlne)
             dataclass_lines.append(
-                ds.Line(elmlne, None, None, None, None, line_type, line_therm_rating, None, None, None, None)
+                ds.Line(
+                    elmlne, None, None, None, None, line_type, line_therm_rating, None, None, None, None)
             )
         device.sect_lines = dataclass_lines
 
@@ -242,7 +247,9 @@ def append_floating_terms(app, devices, floating_terms):
                 ppro = 1
             else:
                 ppro = 99
-            termination = ds.Termination(term, None, None, None, None, None, None, None)
+            termination = ds.Termination(
+                term, None, ph_attr_lookup(term.phtech), round(term.uknom,2), None, None, None, None, None, None
+            )
             analysis.short_circuit(app, bound='Max', f_type='3 Phase', location=line, ppro=ppro)
             current = analysis.get_line_current(line)
             termination.max_fl_ph = current
@@ -312,7 +319,6 @@ def update_device_data(app, region, devices):
             _safe_min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.min_fl_pg > 0]))
 
 
-# @log_arguments
 def update_line_data(devices):
     """
 
@@ -344,6 +350,18 @@ def dataclass_load(load):
         return ds.Load(load, load.bus1.cterm, load.Strat)
     if load.GetClassName() == "ElmTr2":
         return ds.Load(load, load.bushv.cterm, round(load.Snom_a * 1000))
+
+
+def ph_attr_lookup(attr):
+    """
+    Convert the terminal phase technology attribute phtech to a meaningful value
+    :param attr:
+    :return:
+    """
+    phases = {1:[6, 7, 8], 2:[2, 3, 4, 5], 3:[0, 1]}
+    for phase, attr_list in phases.items():
+        if attr in attr_list:
+            return phase
 
 
 def print_devices(app, devices):
