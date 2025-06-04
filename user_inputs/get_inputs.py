@@ -109,14 +109,11 @@ class FaultLevelStudy:
     def __init__(self, app):
         self.app = app
 
-    def main(self, region: str, study_selections: int) -> Tuple[Dict, Dict, Dict]:
+    def main(self, region: str, study_selections: int) -> Tuple[Dict, Dict, Dict, Dict]:
         radial_list = self.mesh_feeder_check()
         feeder_list, external_grid = self.feeders_external_grid(radial_list)
         feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
-        if len(study_selections) > 1:
-            user_selection = self.run_window(feeder_list, feeders_devices, region)
-        else:
-            user_selection = False
+        user_selection = self.run_window(feeder_list, feeders_devices, region)
         return feeders_devices, bu_devices, user_selection, external_grid
 
     def center_window(self, root, width, height):
@@ -355,7 +352,7 @@ class FaultLevelStudy:
         self.app.PrintPlain(error_messages[error_code])
         return self.feeders_external_grid(radial_list)
 
-    def get_feeders_devices(self, radial_list: List[str]) -> Dict[str, List[Any]]:
+    def get_feeders_devices(self, radial_list: List[str]) -> Tuple[Dict[str,list],Dict[Any,list]]:
         """Get active relays and fuses.
         Map them to corresponding external grid or feeder using a dictionary"""
         # Relays belong in the network model project folder.

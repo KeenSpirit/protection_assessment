@@ -12,8 +12,7 @@ from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 import logging.config
 from logging_config import configure_logging as cl
-# from save_results import save_regional_results as srr
-# from save_results import save_seq_results as ssr
+from test_package import test_module
 
 from importlib import reload
 reload(gi)
@@ -25,6 +24,7 @@ reload(cd)
 reload(tm)
 reload(sr)
 reload(ss)
+reload(test_module)
 
 
 def main(app):
@@ -34,13 +34,14 @@ def main(app):
     :return:
     """
 
+
     region = fs.obtain_region(app)
 
     # with temporary_variation(app):
     study_selections = ss.get_study_selections(app)
     feeders_devices, bu_devices, user_selection, _ = gi.get_input(app, region, study_selections)
-    feeders_devices = convert_to_dataclass(feeders_devices)
     feeders_devices = chk_empty_fdrs(app, feeders_devices)
+    feeders_devices = convert_to_dataclass(feeders_devices)
     bu_devices = convert_to_dataclass(bu_devices)
     all_fault_studies = {}
     for feeder, devices in feeders_devices.items():
@@ -125,8 +126,9 @@ if __name__ == '__main__':
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
+    app = pf.GetApplication()
 
-    with app_manager(pf.GetApplication(), gui=True, echo=True) as app:
+    with app_manager(app, gui=True) as app:
         main(app)
 
     end = time.time()

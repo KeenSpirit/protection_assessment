@@ -9,32 +9,6 @@ def set_up(app):
     colour_condition_conf(app, setting_folder)
 
 
-def clear_dpl_attr(app, prjt):
-    """This function will clear all the dpl attributes of elements in the model
-    """
-    app.SetGraphicUpdate(0)
-    # Create a list of elements that could have had results written to them.
-    active_lines = [
-        line
-        for line in prjt.GetContents("*.ElmLne", True)
-        if line.GetAttribute("cpGrid")
-    ]
-    # Loop through all elements and only write to attributes that have got
-    # results already written too.
-    for element in active_lines:
-        if element.GetAttribute("e:dpl1"):
-            element.SetAttribute("e:dpl1", 0)
-        if element.GetAttribute("e:dpl2"):
-            element.SetAttribute("e:dpl2", 0)
-        if element.GetAttribute("e:dpl3"):
-            element.SetAttribute("e:dpl3", 0)
-        if element.GetAttribute("e:dpl4"):
-            element.SetAttribute("e:dpl4", 0)
-        if element.GetAttribute("e:dpl5"):
-            element.SetAttribute("e:dpl5", 0)
-    app.SetGraphicUpdate(1)
-
-
 def quick_filter_conf(app, prjt):
     """
     PROJECT COLOUR SETTINGS: Provide the parameters and formulae for the colour
@@ -74,7 +48,7 @@ def conditional_config(obj, elements):
     filter functions.
     """
     # For each study type, create a list of conditions for the selected region.
-    list_of_cond_names = ["Damaged", "Undamaged", "No Data"]
+    list_of_cond_names = ["Damaged", "Undamaged", "SWER", "No Data"]
 
     # Check 'obj.loc_name' to determine if the scenario is reach or damage.
     # For reach scenarios, get the appropriate region's configuration otherwise
@@ -88,7 +62,7 @@ def conditional_config(obj, elements):
 
 
 def damage_condition_config(list_of_cond_names, obj, elements, dpl_num):
-    """The temperature of the conductor is referenced against its rating. These
+    """The energy of the conductor is referenced against its rating. These
     conditions will display where the ratings are exceeded."""
 
     for cond_name in list_of_cond_names:
@@ -103,9 +77,38 @@ def damage_condition_config(list_of_cond_names, obj, elements, dpl_num):
         elif "Undamaged" in cond_name:
             condition.SetAttribute("expr", [f"e:{dpl_num}=2"])
             condition.SetAttribute("color", 3)
+        elif "SWER" in cond_name:
+            condition.SetAttribute("expr", [f"e:{dpl_num}=3"])
+            condition.SetAttribute("color", 6)
         else:
             condition.SetAttribute("expr", [f"e:{dpl_num}=0"])
             condition.SetAttribute("color", 9)
+
+
+def clear_dpl_attr(app, prjt):
+    """This function will clear all the dpl attributes of elements in the model
+    """
+    app.SetGraphicUpdate(0)
+    # Create a list of elements that could have had results written to them.
+    active_lines = [
+        line
+        for line in prjt.GetContents("*.ElmLne", True)
+        if line.GetAttribute("cpGrid")
+    ]
+    # Loop through all elements and only write to attributes that have got
+    # results already written too.
+    for element in active_lines:
+        if element.GetAttribute("e:dpl1"):
+            element.SetAttribute("e:dpl1", 0)
+        if element.GetAttribute("e:dpl2"):
+            element.SetAttribute("e:dpl2", 0)
+        if element.GetAttribute("e:dpl3"):
+            element.SetAttribute("e:dpl3", 0)
+        if element.GetAttribute("e:dpl4"):
+            element.SetAttribute("e:dpl4", 0)
+        if element.GetAttribute("e:dpl5"):
+            element.SetAttribute("e:dpl5", 0)
+    app.SetGraphicUpdate(1)
 
 
 def colour_condition_conf(app, setting_folder):

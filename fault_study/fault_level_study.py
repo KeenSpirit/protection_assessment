@@ -6,6 +6,7 @@ from fault_study import lines_results, analysis, fault_impedance, floating_termi
 from logging_config.configure_logging import log_arguments
 
 from importlib import reload
+reload(lines_results)
 reload(ft)
 reload(fault_impedance)
 
@@ -44,7 +45,7 @@ def fault_study(app, region, feeder, bu_devices, devices):
     floating_terms = ft.get_floating_terminals(feeder, devices)
     append_floating_terms(app, devices, floating_terms)
     update_device_data(app, region, devices)
-    update_line_data(devices)
+    update_line_data(app, devices)
 
     return devices
 
@@ -184,9 +185,12 @@ def get_device_sections(devices):
         dataclass_lines = []
         for elmlne in section_lines:
             line_type, line_therm_rating = lines_results.get_conductor(elmlne)
+            phases = lines_results.get_phases(elmlne)
+            voltage = lines_results.get_voltage(elmlne)
             dataclass_lines.append(
                 ds.Line(
-                    elmlne, None, None, None, None, line_type, line_therm_rating, None, None, None, None)
+                    elmlne, phases, voltage, None, None, None, None, line_type, line_therm_rating,
+                    None, None, None, None, None, None)
             )
         device.sect_lines = dataclass_lines
 
@@ -319,9 +323,11 @@ def update_device_data(app, region, devices):
             _safe_min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.min_fl_pg > 0]))
 
 
-def update_line_data(devices):
+def update_line_data(app, devices):
     """
-
+    Get max and min fault current seen by the line for faults occurring within the device protection section
+    (i.e. not just faults that occur on the line).
+    These values are used in the conductor damage assessment.
     :param devices:
     :return:
     """
@@ -331,13 +337,24 @@ def update_line_data(devices):
         for line in lines:
             elmlne = line.object
             lne_cubs = [elmlne.bus1, elmlne.bus2]
-            lne_terms = [cub.cterm for cub in lne_cubs if cub is not None]
+            lne_term_obs = [cub.cterm for cub in lne_cubs if cub is not None]
             sect_term_obs = [term.object for term in device.sect_terms]
-            if any(terms in sect_term_obs for terms in lne_terms):
-                line.max_fl_ph = max([term.max_fl_ph for term in device.sect_terms if term.object in lne_terms])
-                line.max_fl_pg = max([term.max_fl_pg for term in device.sect_terms if term.object in lne_terms])
-                line.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms if term.object in lne_terms])
-                line.min_fl_pg = min([term.min_fl_pg for term in device.sect_terms if term.object in lne_terms])
+
+            if any(terms in sect_term_obs for terms in lne_term_obs):
+                line_terms = [term for term in device.sect_terms if term.object in lne_term_obs]
+                line.max_fl_ph = max([term.max_fl_ph for term in line_terms])
+                line.max_fl_pg = max([term.max_fl_pg for term in line_terms])
+                # Get line min (i.e. min fl for faults downstream of the line in the protection section)
+                lne_max_term_obj = [term.object for term in line_terms if term.max_fl_pg == line.max_fl_pg][0]
+                max_lne_cub = [cub for cub in lne_cubs if cub.cterm == lne_max_term_obj][0]
+                line_ds_terms = [obj for obj in max_lne_cub.GetAll() if obj.GetClassName() == "ElmTerm"]
+                if line_ds_terms:
+                    line.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms if term.object in line_ds_terms])
+                    line.min_fl_pg = min([term.min_fl_pg for term in device.sect_terms if term.object in line_ds_terms])
+                else:
+                    app.PrintPlain(line.object)
+                    line.min_fl_ph = min([term.min_fl_ph for term in line_terms])
+                    line.min_fl_pg = min([term.min_fl_pg for term in line_terms])
             else:
                 line.max_fl_ph = 0
                 line.max_fl_pg = 0
@@ -363,26 +380,4 @@ def ph_attr_lookup(attr):
         if attr in attr_list:
             return phase
 
-
-def print_devices(app, devices):
-    """ Function used for debugging purposes only"""
-
-    for device in devices:
-        app.PrintPlain(f"object: {device.object}")
-        app.PrintPlain(f"cubicle: {device.cubicle}")
-        app.PrintPlain(f"term: {device.term}")
-        app.PrintPlain(f"ds_capacity: {device.ds_capacity}")
-        app.PrintPlain(f"max_fl_ph: {device.max_fl_ph}")
-        app.PrintPlain(f"max_fl_pg: {device.max_fl_pg}")
-        app.PrintPlain(f"min_fl_ph: {device.min_fl_ph}")
-        app.PrintPlain(f"min_fl_pg: {device.min_fl_pg}")
-        app.PrintPlain(f"max_ds_tr: {device.max_ds_tr}")
-        app.PrintPlain(f"max_tr_size: {device.max_tr_size}")
-        app.PrintPlain(f"tr_max_ph: {device.tr_max_ph}")
-        app.PrintPlain(f"tr_max_pg: {device.tr_max_pg}")
-        app.PrintPlain(f"sect_terms: {device.sect_terms}")
-        app.PrintPlain(f"sect_loads: {device.sect_loads}")
-        app.PrintPlain(f"sect_lines: {device.sect_lines}")
-        app.PrintPlain(f"us_devices: {device.us_devices}")
-        app.PrintPlain(f"ds_devices: {device.ds_devices}")
 

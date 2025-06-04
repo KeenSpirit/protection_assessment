@@ -26,6 +26,8 @@ def update_construction(all_nodes):
             continue
         upstream_lines = []
         # Get all lines connected to the node
+        #TODO: Sometimes the upstream connection is not a line (can be elmcoup)
+        # Need to keep going upstream until we find a line
         line_elements = [ele for ele in node.object.GetConnectedElements() if ele.GetClassName() == 'ElmLne']
         for ElmLne in line_elements:
             # For each connected line, determine, if it's an upstream line or a downstream line
@@ -51,7 +53,7 @@ def update_construction(all_nodes):
             if not line.IsCable():
                 node.constr = "OH"
         if node.constr is None:
-            node.constr = "UG"
+            node.constr = "OH"
 
 
 def term_pg_fl(region, term):

@@ -1,140 +1,81 @@
 import math
 from fault_study import fault_impedance
 
-def get_prot_elements(device):
-    """ Get all of the time overcurrent and instantneous overcurrent
-    protection elements that are active and return useful attributes
+
+def get_active_elements(elements: dict, fault_type: str):
     """
-    prot_elements = ['RelToc', 'RelIoc']
-
-    elements = [element for element in device.GetContents('*.Rel?oc', 1)
-                if element.GetAttribute('outserv') == 0
-                if element.GetParent().GetAttribute('outserv') == 0
-                if element.GetClassName() in prot_elements]
-
-    return elements
-
-
-def get_active_elements(elements, fault_type: str):
-    """
-    From a list of protection elements get those elements that are capable of detecting the fault type
-    elements str: 'Phase-Ground', '2-Phase', '3-Phase'
+    From a dictionary of protection elements get those elements that are capable of detecting the fault type
+    fault_type str: 'Phase-Ground', '2-Phase', '3-Phase'
     """
 
-    earth_fault_type = ['1ph', '3I0', 'S3I0', 'd1m', 'I0']
-    negative_sequence_type = ['I2', '3I2']
-    phase_type = ['3ph', 'phA', 'phB', 'phC', 'd3m']
+    if fault_type == '2-Phase':
+        # Only negative sequence and phase elements are active
+        active_elements = (elements['oc_idmt_elements'] + elements['oc_inst_element']
+                           + elements['nps_idmt_elements'] + elements['nps_inst_elements'])
+    elif fault_type == '3-Phase':
+        # Only phase elements are active
+        active_elements = (elements['oc_idmt_elements'] + elements['oc_inst_element'])
+    else:
+        # 'Phase-Ground', all elements are active
+        active_elements = [item for sublist in elements.values() for item in sublist]
 
-    active_elements = []
-    for element in elements:
-        element_type = element.typ_id.atype
-        if fault_type == 'Phase-Ground':
-            # all elements are active
-            active_elements.append(element)
-        elif fault_type == '2-Phase':
-            if element_type in negative_sequence_type or element_type in phase_type:
-                # Only negative sequence and phase elements are active
-                active_elements.append(element)
-        elif fault_type == '3-Phase':
-            if element_type in phase_type:
-                # Only phase elements are active
-                active_elements.append(element)
+    # earth_fault_type = ['1ph', '3I0', 'S3I0', 'd1m', 'I0']
+    # negative_sequence_type = ['I2', '3I2']
+    # phase_type = ['3ph', 'phA', 'phB', 'phC', 'd3m']
+    #
+    # active_elements = []
+    # for element in elements:
+    #     element_type = element.typ_id.atype
+    #     if fault_type == 'Phase-Ground':
+    #         # all elements are active
+    #         active_elements.append(element)
+    #     elif fault_type == '2-Phase':
+    #         if element_type in negative_sequence_type or element_type in phase_type:
+    #             # Only negative sequence and phase elements are active
+    #             active_elements.append(element)
+    #     elif fault_type == '3-Phase':
+    #         if element_type in phase_type:
+    #             # Only phase elements are active
+    #             active_elements.append(element)
 
     return active_elements
 
 
-# def device_pickup(device, fault_type: str):
-#     """
-#     Obtain the device pickup for the given fault type
-#     fault_type: 'Phase-Ground', '2-Phase', '3-Phase'
-#     """
-#
-#     if device.GetClassName() == 'ElmRelay':
-#         elements = get_prot_elements(device)
-#         active_elements = get_active_elements(elements, fault_type)
-#
-#         minimum_pickup = 9999
-#         for element in active_elements:
-#             if element.GetClassName() == 'RelToc':
-#                 pickup = element.GetAttribute("e:cpIpset")
-#             elif element.GetClassName() == 'RelIoc':
-#                 pickup = element.GetAttribute("e:cpIpset")
-#             else:
-#                 pickup = 9999
-#             if pickup < minimum_pickup:
-#                 minimum_pickup = pickup
-#         return minimum_pickup
-#     else:
-#         # Device is a fuse
-#         pickup = device.irat * 2
-#     return minimum_pickup
-
-
-def determine_pickup_values(device_pf):
-    """The values returned from this function will be used to calculate the
-    reach factor."""
-    # If the devices is a fuse then it will have a known size. A fuse factor
-    # of two will be applied
-    if device_pf.GetClassName() == "RelFuse":
-        fuse_size = int(device_pf.GetAttribute("r:typ_id:e:irat"))
-        setting_values = [fuse_size * 2, fuse_size * 2, 0]
-        return setting_values
-    # It has been assumed that only IDMT elements will be used to reach for
-    # Phase and earth faults.
+def get_prot_elements(device_pf):
+    """ Get all of the time overcurrent and instantneous overcurrent
+    protection elements that are active and return useful attributes
+    """
     idmt_elements = [
         idmt_element
         for idmt_element in device_pf.GetContents("*.RelToc", True)
         if not idmt_element.GetAttribute("e:outserv")
     ]
-    # idmt_elements =  device_pf.GetContents('*.RelToc', True)
-    # app.PrintInfo(f"relay = {device_pf}, Element = {idmt_elements}")
-    # Determine the OC pickup
     oc_idmt_elements = [
         oc_idmt_element
         for oc_idmt_element in idmt_elements
         if oc_idmt_element.GetAttribute("r:typ_id:e:sfiec") == "I>t"
         if "definite" not in oc_idmt_element.pcharac.loc_name.lower()
     ]
-    # Not all devices use IDMT elements. If a relay does not have a configured
-    # IDMT then look to include the INST element to perform reach.
-    if not oc_idmt_elements:
-        oc_idmt_elements = [
-            oc_inst_element
-            for oc_inst_element in device_pf.GetContents("*.RelIoc", True)
-            if oc_inst_element.GetAttribute("r:typ_id:e:sfiec") == "I>>"
-            if not oc_inst_element.IsOutOfService()
-            if oc_inst_element.GetAttribute("r:typ_id:e:irecltarget")
-        ]
-    # Select the largest pickup. This is assuming you can have multiple pickups
-    # and one trip is dependent on this particular setting
-    highest_oc_pickup = 0
-    for oc_idmt_element in oc_idmt_elements:
-        pickup = oc_idmt_element.GetAttribute("e:cpIpset")
-        if pickup > highest_oc_pickup:
-            highest_oc_pickup = pickup
-    # Determine the EF pickup
+    oc_inst_element = [
+        oc_inst_element
+        for oc_inst_element in device_pf.GetContents("*.RelIoc", True)
+        if oc_inst_element.GetAttribute("r:typ_id:e:sfiec") == "I>>"
+        if not oc_inst_element.IsOutOfService()
+        if oc_inst_element.GetAttribute("r:typ_id:e:irecltarget")
+    ]
     ef_idmt_elements = [
         ef_idmt_element
         for ef_idmt_element in idmt_elements
         if ef_idmt_element.GetAttribute("r:typ_id:e:sfiec") == "IE>t"
         if "definite" not in ef_idmt_element.pcharac.loc_name.lower()
     ]
-    if not ef_idmt_elements:
-        ef_idmt_elements = [
-            ef_inst_element
-            for ef_inst_element in device_pf.GetContents("*.RelIoc", True)
-            if ef_inst_element.GetAttribute("r:typ_id:e:sfiec") == "IE>>"
-            if not ef_inst_element.IsOutOfService()
-            if ef_inst_element.GetAttribute("r:typ_id:e:irecltarget")
-        ]
-    # Select the largest pickup. This is assuming you can have multiple pickups
-    # and one trip is dependent on this particular setting
-    highest_ef_pickup = 0
-    for ef_idmt_element in ef_idmt_elements:
-        pickup = ef_idmt_element.GetAttribute("e:cpIpset")
-        if pickup > highest_ef_pickup:
-            highest_ef_pickup = pickup
-    # Determine the NPS pickup
+    ef_inst_element = [
+        ef_inst_element
+        for ef_inst_element in device_pf.GetContents("*.RelIoc", True)
+        if ef_inst_element.GetAttribute("r:typ_id:e:sfiec") == "IE>>"
+        if not ef_inst_element.IsOutOfService()
+        if ef_inst_element.GetAttribute("r:typ_id:e:irecltarget")
+    ]
     nps_idmt_elements = [
         nps_idmt_element
         for nps_idmt_element in idmt_elements
@@ -147,25 +88,11 @@ def determine_pickup_values(device_pf):
         if nps_inst_element.GetAttribute("r:typ_id:e:irecltarget")
         if not nps_inst_element.IsOutOfService()
     ]
-    nps_elements = nps_idmt_elements + nps_inst_elements
-    # Select the largest pickup. This is assuming you can have multiple pickups
-    # and one trip is dependent on this particular setting
-    highest_nps_pickup = 0
-    for nps_idmt_element in nps_elements:
-        pickup = nps_idmt_element.GetAttribute("e:cpIpset")
-        if pickup > highest_nps_pickup:
-            highest_nps_pickup = pickup
-    if highest_nps_pickup > 0.1:
-        highest_nps_pickup = 0
-    setting_values = [round(highest_oc_pickup), round(highest_ef_pickup), round(highest_nps_pickup)]
-    return setting_values
+    elements = {'oc_idmt_elements': oc_idmt_elements, 'oc_inst_element': oc_inst_element,
+                'ef_idmt_elements': ef_idmt_elements, 'ef_inst_element': ef_inst_element,
+                'nps_idmt_elements': nps_idmt_elements, 'nps_inst_elements': nps_inst_elements}
 
-
-def get_fuse_current(fuse):
-    """
-
-    """
-    return fuse.GetAttribute("c:labs")
+    return elements
 
 
 def get_measured_current(element, fault_level, fault_type):
@@ -231,6 +158,7 @@ def convert_to_i2(fault_current, fault_type: str, threei2=False):
         result = (ia2 + ib2 + ic2)
     return result
 
+
 def convert_to_i0(fault_current, threei0=False):
     """
     """
@@ -238,10 +166,6 @@ def convert_to_i0(fault_current, threei0=False):
         return 3 * fault_current
     else:
         return fault_current
-
-
-def measure_type(device):
-    pass
 
 
 def get_device_trips(device):
@@ -256,6 +180,80 @@ def get_device_trips(device):
     else:
         trips = 1  # device  is a fuse
     return trips
+
+
+def reset_reclosing(ElmRelay):
+
+    if ElmRelay.GetClassName() == 'ElmRelay':
+        ElmRecls = ElmRelay.GetChildren(0, '*.RelRecl', 1)
+        for ElmRecl in ElmRecls:
+            ElmRecl.starttimeframe = 1
+
+
+def trip_count(device, increment=True):
+    """Return either the current relay trip number or an increment thereof"""
+
+    ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
+
+    if len(ElmRecls) == 0 or ElmRecls[0].outserv or ElmRecls[0].reclnotactive:
+        if increment:
+            trip = 2
+        else:
+            trip = 1        # device is probably a fuse
+    else:
+        assert len(ElmRecls) == 1, 'Multiple reclose elements found'
+        ElmRecl = ElmRecls[0]
+        if increment:
+            ElmRecl.starttimeframe += 1
+        trip = ElmRecl.starttimeframe
+    return trip
+
+
+def set_enabled_elements(app, device):
+    """For a given device, set out of service the elements disabled for the current auto-reclose iteration"""
+
+    if device.GetClassName() != 'ElmRelay':
+        return False
+    ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
+    if len(ElmRecls) == 0:
+        block_service_status = None
+        return block_service_status
+    assert len(ElmRecls) == 1, 'Multiple reclose elements found'
+    ElmRecl = ElmRecls[0]
+
+    logic = ElmRecl.GetAttribute("ilogic")
+    recloser_type = ElmRecl.GetAttribute("typ_id")
+    type_block_id = recloser_type.GetAttribute("blockid")
+    net_elements = device.GetAttribute("pdiselm")
+    reclose_blocks = {}
+    for i, block in enumerate(type_block_id):
+        block_logic = logic[i]
+        for element in net_elements:
+            if element is not None and block in element.loc_name:
+                reclose_blocks[element] = block_logic
+
+    trip_number = ElmRecl.starttimeframe
+    if trip_number <= 1:
+        list_index = 0
+    else:
+        list_index = trip_number - 1
+
+    block_service_status = {}
+    for block in reclose_blocks:
+        block_service_status[block] = block.GetAttribute('outserv')
+        block_state = reclose_blocks[block][list_index]
+        if block_state in [1.0, 2.0]:
+            block.SetAttribute('outserv', 0)
+        else:
+            block.SetAttribute('outserv', 1)
+    return block_service_status
+
+
+def reset_block_service_status(block_service_status):
+    if block_service_status:
+        for block in block_service_status:
+            block.SetAttribute('outserv', block_service_status[block])
+    return
 
 
 def device_reach_factors(region, device):
@@ -401,6 +399,60 @@ def device_reach_factors(region, device):
         'bu_nps_ph_rf' : bu_nps_ph_rf
     }
     return device_reach_factors
+
+
+def determine_pickup_values(device_pf):
+    """The values returned from this function will be used to calculate the
+    reach factor."""
+    # If the devices is a fuse then it will have a known size. A fuse factor
+    # of two will be applied
+    if device_pf.GetClassName() == "RelFuse":
+        fuse_size = int(device_pf.GetAttribute("r:typ_id:e:irat"))
+        setting_values = [fuse_size * 2, fuse_size * 2, 0]
+        return setting_values
+
+    elements = get_prot_elements(device_pf)
+    # It has been assumed that only IDMT elements will be used to reach for
+    # Phase and earth faults.
+    # Determine the OC pickup
+    oc_idmt_elements = elements['oc_idmt_elements']
+    # Not all devices use IDMT elements. If a relay does not have a configured
+    # IDMT then look to include the INST element to perform reach.
+    if not oc_idmt_elements:
+        oc_idmt_elements = elements['oc_inst_element']
+    # Select the largest pickup. This is assuming you can have multiple pickups
+    # and one trip is dependent on this particular setting
+    highest_oc_pickup = 0
+    for oc_idmt_element in oc_idmt_elements:
+        pickup = oc_idmt_element.GetAttribute("e:cpIpset")
+        if pickup > highest_oc_pickup:
+            highest_oc_pickup = pickup
+    # Determine the EF pickup
+    ef_idmt_elements = elements['ef_idmt_elements']
+    if not ef_idmt_elements:
+        ef_idmt_elements = elements['ef_inst_element']
+    # Select the largest pickup. This is assuming you can have multiple pickups
+    # and one trip is dependent on this particular setting
+    highest_ef_pickup = 0
+    for ef_idmt_element in ef_idmt_elements:
+        pickup = ef_idmt_element.GetAttribute("e:cpIpset")
+        if pickup > highest_ef_pickup:
+            highest_ef_pickup = pickup
+    # Determine the NPS pickup
+    nps_idmt_elements = elements['nps_idmt_elements']
+    nps_inst_elements = elements['nps_inst_elements']
+    nps_elements = nps_idmt_elements + nps_inst_elements
+    # Select the largest pickup. This is assuming you can have multiple pickups
+    # and one trip is dependent on this particular setting
+    highest_nps_pickup = 0
+    for nps_idmt_element in nps_elements:
+        pickup = nps_idmt_element.GetAttribute("e:cpIpset")
+        if pickup > highest_nps_pickup:
+            highest_nps_pickup = pickup
+    # if highest_nps_pickup > 100:
+    #     highest_nps_pickup = 0
+    setting_values = [round(highest_oc_pickup), round(highest_ef_pickup), round(highest_nps_pickup)]
+    return setting_values
 
 
 def swer_transform(device, term, term_fl_pg):

@@ -59,13 +59,14 @@ def app_manager(app, clear=True, gui=False, echo=False, cache=False):
     try:
         app.ResetCalculation()
         if clear: app.ClearOutputWindow()
-
         if echo:
             app.EchoOn()
         else:
+            echo = app.GetFromStudyCase('ComEcho')
             echo.iopt_err = True
             echo.iopt_wrng = False
             echo.iopt_info = False
+            echo.iopt_oth = True
             app.EchoOff()
 
         app.SetGuiUpdateEnabled(1) if gui else app.SetGuiUpdateEnabled(0)

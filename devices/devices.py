@@ -79,14 +79,18 @@ class Device:
 @dataclass
 class Line:
     object: object
+    phases: int
+    l_l_volts: float
     max_fl_ph: float
     max_fl_pg: float
     min_fl_ph: float
     min_fl_pg: float
     line_type: str
     thermal_rating: float
+    ph_energy: float
     ph_clear_time: float
     ph_fl: float
+    pg_energy: float
     pg_clear_time: float
     pg_fl: float
 
