@@ -1,7 +1,9 @@
 import sys
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
 import powerfactorytyping as pft
-from devices import devices as ds
+import pf_protection_helper as pph
+from devices import fuses as ds
+from devices import dataclass_definitions as dd
 from fault_study import lines_results, analysis, fault_impedance, floating_terminals as ft
 from logging_config.configure_logging import log_arguments
 
@@ -24,7 +26,7 @@ def fault_study(app, region, feeder, bu_devices, devices):
     get_downstream_objects(app, devices)
     us_ds_device(devices, bu_devices)
     get_ds_capacity(devices)
-    get_device_sections(devices)
+    get_device_sections(app, devices)
 
     analysis.short_circuit(app, bound='Max', f_type='Ground')
     terminal_fls(devices, bound='Max', f_type='Ground')
@@ -50,30 +52,6 @@ def fault_study(app, region, feeder, bu_devices, devices):
     return devices
 
 
-def obtain_region(app):
-
-    project = app.GetActiveProject()
-    derived_proj = project.der_baseproject
-    der_proj_name = derived_proj.GetFullName()
-
-    regional_model = 'Regional Models'
-    seq_model = 'SEQ'
-
-    if regional_model in der_proj_name:
-        # This is a regional model
-        region=regional_model
-    elif seq_model in der_proj_name:
-        # This is a SEQ model
-        region = seq_model
-    else:
-        msg = (
-            "The appropriate region for the model could not be found. "
-            "Please contact the script administrator to resolve this issue."
-        )
-        raise RuntimeError(msg)
-    return region
-
-
 def get_downstream_objects(app, devices):
     """
 
@@ -83,7 +61,7 @@ def get_downstream_objects(app, devices):
     all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
     grids = [grid for grid in all_grids if grid.outserv == 0]
 
-    region = obtain_region(app)
+    region = pph.obtain_region(app)
     for device in devices:
         terminals = [device.term]
         loads = []
@@ -146,7 +124,7 @@ def get_ds_capacity(devices):
         device.ds_capacity = round(sum([_get_load(obj) for obj in device.sect_loads]))
 
 
-def get_device_sections(devices):
+def get_device_sections(app, devices):
     """
 
     :param devices:
@@ -173,9 +151,10 @@ def get_device_sections(devices):
 
     for device in devices:
         section_terms = _sections(devices_terms)[device.term]
-        dataclass_terms = [ds.Termination(
-            obj, None, ph_attr_lookup(obj.phtech), round(obj.uknom,2), None, None, None, None, None, None
+        dataclass_terms = [dd.Termination(
+            obj, None, ds.ph_attr_lookup(obj.phtech), round(obj.uknom,2), None, None, None, None, None, None
         ) for obj in section_terms]
+
         device.sect_terms = dataclass_terms
         section_loads = _sections(devices_loads)[device.term]
         dataclass_loads = [dataclass_load(obj) for obj in section_loads]
@@ -188,7 +167,7 @@ def get_device_sections(devices):
             phases = lines_results.get_phases(elmlne)
             voltage = lines_results.get_voltage(elmlne)
             dataclass_lines.append(
-                ds.Line(
+                dd.Line(
                     elmlne, phases, voltage, None, None, None, None, line_type, line_therm_rating,
                     None, None, None, None, None, None)
             )
@@ -251,8 +230,8 @@ def append_floating_terms(app, devices, floating_terms):
                 ppro = 1
             else:
                 ppro = 99
-            termination = ds.Termination(
-                term, None, ph_attr_lookup(term.phtech), round(term.uknom,2), None, None, None, None, None, None
+            termination = dd.Termination(
+                term, None, ds.ph_attr_lookup(term.phtech), round(term.uknom,2), None, None, None, None, None, None
             )
             analysis.short_circuit(app, bound='Max', f_type='3 Phase', location=line, ppro=ppro)
             current = analysis.get_line_current(line)
@@ -298,23 +277,28 @@ def update_device_data(app, region, devices):
 
     for device in devices:
         # Update transformer data
+        max_tr_size = _safe_max([load.load_kva for load in device.sect_loads])
+        max_ds_trs = [load for load in device.sect_loads if load.load_kva == max_tr_size]
+        # The load must have a termination in the list of section terminations
+        sect_terms = [term.object for term in device.sect_terms]
+        max_ds_trs = [load for load in max_ds_trs if load.term in sect_terms]
+        # Initiate max values
         try:
-            device.max_tr_size = _safe_max([load.load_kva for load in device.sect_loads])
-        except:
-            app.PrintPlain(f"device.object{device.object}")
-            app.PrintPlain(f"device.sect_loads{device.sect_loads}")
-        max_ds_trs = [load.term for load in device.sect_loads if load.load_kva == device.max_tr_size]
-        max_ds_trs_class = [term for term in device.sect_terms if term.object in max_ds_trs]
-        try:
-            device.tr_max_ph = _safe_max([term.max_fl_ph for term in device.sect_terms if term in max_ds_trs_class])
-        except:
-            app.PrintPlain(f"device.object{device.object}")
-            app.PrintPlain(f"max_ds_trs{max_ds_trs}")
-            app.PrintPlain(f"device.sect_terms{device.sect_terms}")
-            app.PrintPlain(f"max_ds_trs_class{max_ds_trs_class}")
-        device.tr_max_pg = _safe_max([term.max_fl_pg for term in device.sect_terms if term in max_ds_trs_class])
-        device.max_ds_tr = \
-            [term.object.cpSubstat.loc_name for term in max_ds_trs_class if term.max_fl_pg == device.tr_max_pg][0]
+            max_ds_tr = max_ds_trs[0]
+        except IndexError:
+            max_ds_tr = dataclass_load(None)
+        max_fl_pg = 0
+        # Search for max tr
+        for tr in max_ds_trs:
+            term_dataclass = [t for t in device.sect_terms if t.object == tr.term][0]
+            if term_dataclass.max_fl_pg >= max_fl_pg:
+                max_fl_pg = term_dataclass.max_fl_pg
+                tr.term = term_dataclass
+                tr.max_pg = term_dataclass.max_fl_pg
+                tr.max_ph = term_dataclass.max_fl_ph
+                max_ds_tr = tr
+        device.max_ds_tr = max_ds_tr
+
         # Update device fl data
         device.max_fl_ph = _safe_max([term.max_fl_ph for term in device.sect_terms])
         device.max_fl_pg = _safe_max([term.max_fl_pg for term in device.sect_terms])
@@ -332,27 +316,43 @@ def update_line_data(app, devices):
     :return:
     """
 
+    all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
+    grids = [grid for grid in all_grids if grid.outserv == 0]
+
     for device in devices:
         lines = device.sect_lines
         for line in lines:
             elmlne = line.object
-            lne_cubs = [elmlne.bus1, elmlne.bus2]
-            lne_term_obs = [cub.cterm for cub in lne_cubs if cub is not None]
+            lne_cubs = [cub for cub in [elmlne.bus1, elmlne.bus2] if cub is not None]
+            lne_term_obs = [cub.cterm for cub in lne_cubs]
             sect_term_obs = [term.object for term in device.sect_terms]
 
             if any(terms in sect_term_obs for terms in lne_term_obs):
                 line_terms = [term for term in device.sect_terms if term.object in lne_term_obs]
                 line.max_fl_ph = max([term.max_fl_ph for term in line_terms])
                 line.max_fl_pg = max([term.max_fl_pg for term in line_terms])
+
                 # Get line min (i.e. min fl for faults downstream of the line in the protection section)
                 lne_max_term_obj = [term.object for term in line_terms if term.max_fl_pg == line.max_fl_pg][0]
                 max_lne_cub = [cub for cub in lne_cubs if cub.cterm == lne_max_term_obj][0]
-                line_ds_terms = [obj for obj in max_lne_cub.GetAll() if obj.GetClassName() == "ElmTerm"]
+
+                down_elements = max_lne_cub.GetAll(1, 0)
+                # If the external grid is in the downstream list, you're searching in the wrong direction
+                if any(item in grids for item in down_elements):
+                    down_objs = max_lne_cub.GetAll(0, 0)
+                else:
+                    down_objs = down_elements
+
+                line_ds_terms = [obj for obj in down_objs if obj.GetClassName() == "ElmTerm"]
                 if line_ds_terms:
-                    line.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms if term.object in line_ds_terms])
+                    try:
+                        line.min_fl_ph = min([term.min_fl_ph for term in device.sect_terms if term.object in line_ds_terms])
+                    except:
+                        app.PrintPlain(line.object)
+                        app.PrintPlain(f"max_lne_cub: {max_lne_cub}")
+                        app.PrintPlain(f"line_ds_terms: {line_ds_terms}")
                     line.min_fl_pg = min([term.min_fl_pg for term in device.sect_terms if term.object in line_ds_terms])
                 else:
-                    app.PrintPlain(line.object)
                     line.min_fl_ph = min([term.min_fl_ph for term in line_terms])
                     line.min_fl_pg = min([term.min_fl_pg for term in line_terms])
             else:
@@ -363,21 +363,19 @@ def update_line_data(app, devices):
 
 
 def dataclass_load(load):
+    if load is None:
+        return dd.Tfmr(None, None, None, None, None, None, None, None)
     if load.GetClassName() == "ElmLod":
-        return ds.Load(load, load.bus1.cterm, load.Strat)
+        return dd.Tfmr(load, load.bus1.cterm, round(load.Strat), None, None, None, None, None)
     if load.GetClassName() == "ElmTr2":
-        return ds.Load(load, load.bushv.cterm, round(load.Snom_a * 1000))
+        return dd.Tfmr(load, load.bushv.cterm, round(load.Snom_a * 1000), None, None, None, None, None)
 
 
-def ph_attr_lookup(attr):
-    """
-    Convert the terminal phase technology attribute phtech to a meaningful value
-    :param attr:
-    :return:
-    """
-    phases = {1:[6, 7, 8], 2:[2, 3, 4, 5], 3:[0, 1]}
-    for phase, attr_list in phases.items():
-        if attr in attr_list:
-            return phase
+
+
+
+
+
+
 
 

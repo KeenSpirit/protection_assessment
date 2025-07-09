@@ -2,9 +2,6 @@
 
 def update_node_construction(devices):
 
-
-
-
     all_nodes = get_all_terms(devices)
     update_construction(all_nodes)
 
@@ -24,33 +21,30 @@ def update_construction(all_nodes):
     for node in all_nodes:
         if node.constr is not None:
             continue
-        upstream_lines = []
         # Get all lines connected to the node
-        #TODO: Sometimes the upstream connection is not a line (can be elmcoup)
-        # Need to keep going upstream until we find a line
         line_elements = [ele for ele in node.object.GetConnectedElements() if ele.GetClassName() == 'ElmLne']
-        for ElmLne in line_elements:
-            # For each connected line, determine, if it's an upstream line or a downstream line
-            cub_1 = ElmLne.bus1
-            cub_2 = ElmLne.bus2
-            if cub_1 and cub_2:
-                term_1 = cub_1.cterm
-                term_2 = cub_2.cterm
-                if node.object == term_1:
-                    remote_node = term_2
-                else:
-                    remote_node = term_1
-                try:
-                    remote_node_fl = [node.min_fl_pg for node in all_nodes if node.object == remote_node][0]
-                except IndexError:
-                    # Probably a substation bus node
-                    remote_node_fl = 0
-                if node.min_fl_pg < remote_node_fl:
-                    # This is an upstream line
-                    upstream_lines.append(ElmLne)
+        # Sometimes the upstream connection is not a line (can be elmcoup)
+        if not line_elements:
+            try:
+                substation = node.cpSubstat
+                proxy_node = substation.pBusbar
+                line_elements = [
+                    ele for ele in proxy_node.GetConnectedElements() if ele.GetClassName() == 'ElmLne'
+                ]
+            except:
+                line_elements = []
         # For all upstream lines, determine whether they are overhead or underground construction
-        for line in upstream_lines:
-            if not line.IsCable():
+        for line in line_elements:
+            try:
+                line_type = line.typ_id
+                if 'SWER' in line_type.loc_name:
+                    node.constr = "SWER"
+                    break
+            except AttributeError:
+                pass
+            if line.IsCable() and node.constr != "OH":
+                node.constr = "UG"
+            else:
                 node.constr = "OH"
         if node.constr is None:
             node.constr = "OH"
@@ -73,9 +67,3 @@ def term_pg_fl(region, term):
         else:
             fault_level = term.min_fl_pg10
     return fault_level
-
-    
-
-
-
-

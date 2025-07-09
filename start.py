@@ -5,16 +5,20 @@ from pf_protection_helper import *
 from fault_study import fault_level_study as fs, fault_level_study as tm
 from user_inputs import get_inputs as gi
 from user_inputs import study_selection as ss
-from oc_plots import plot_relays as pr
+import oc_plots
+from importlib import reload
+reload(oc_plots)
+from oc_plots import plot_relays as pr, get_rmu_fuses as grf
 from prot_audit import audit as pa
-from devices import devices as ds
+from devices import fuses as ds
+from devices import dataclass_definitions as dd
 from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 import logging.config
 from logging_config import configure_logging as cl
 from test_package import test_module
 
-from importlib import reload
+# from importlib import reload
 reload(gi)
 reload(fs)
 reload(pr)
@@ -24,6 +28,7 @@ reload(cd)
 reload(tm)
 reload(sr)
 reload(ss)
+reload(grf)
 reload(test_module)
 
 
@@ -34,9 +39,7 @@ def main(app):
     :return:
     """
 
-
-    region = fs.obtain_region(app)
-
+    region = obtain_region(app)
     # with temporary_variation(app):
     study_selections = ss.get_study_selections(app)
     feeders_devices, bu_devices, user_selection, _ = gi.get_input(app, region, study_selections)
@@ -52,7 +55,8 @@ def main(app):
             if 'Conductor Damage Assessment' in study_selections:
                 cd.cond_damage(app, selected_devices)
             if 'Protection Relay Coordination Plot' in study_selections:
-                pr.plot_all_relays(app, selected_devices)
+                system_volts = feeder_obj.cn_bus.uknom
+                pr.plot_all_relays(app, devices, selected_devices, system_volts)
             if 'Protection Audit' in study_selections:
                 pa.audit_all_relays(app, selected_devices)
         all_fault_studies[feeder] = devices
@@ -70,15 +74,12 @@ def convert_to_dataclass(dictionary):
     new_dictionary = {}
     for key, value in dictionary.items():
         new_dictionary[key] = [
-        ds.Device(
+        dd.Device(
             element,
             element.fold_id,
             element.fold_id.cterm,
-            fs.ph_attr_lookup(element.fold_id.cterm.phtech),
+            ds.ph_attr_lookup(element.fold_id.cterm.phtech),
             round(element.fold_id.cterm.uknom, 2),
-            None,
-            None,
-            None,
             None,
             None,
             None,

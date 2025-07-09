@@ -224,6 +224,8 @@ def set_enabled_elements(app, device):
     logic = ElmRecl.GetAttribute("ilogic")
     recloser_type = ElmRecl.GetAttribute("typ_id")
     type_block_id = recloser_type.GetAttribute("blockid")
+    if type_block_id is None:
+        return None
     net_elements = device.GetAttribute("pdiselm")
     reclose_blocks = {}
     for i, block in enumerate(type_block_id):

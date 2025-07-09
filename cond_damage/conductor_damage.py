@@ -14,13 +14,12 @@ def cond_damage(app, devices):
 
     cf.set_up(app)
     fl_step = 10
-
     for device in devices:
         dev_obj = device.object
-        app.PrintPlain(f"Performing conductor damage assessment for {dev_obj.loc_name}...")
         lines = device.sect_lines
         total_trips = relays.get_device_trips(dev_obj)
         fault_type = '2-Phase'
+        app.PrintPlain(f"Performing phase fault conductor damage assessment for {dev_obj.loc_name}...")
         for line in lines:
             relays.reset_reclosing(dev_obj)
             trip_count = 1
@@ -43,6 +42,7 @@ def cond_damage(app, devices):
         ar.rewrite_results(app, lines, fault_type)
 
         line_fault_type = 'Phase-Ground'
+        app.PrintPlain(f"Performing earth fault conductor damage assessment for {dev_obj.loc_name}...")
         for line in lines:
             relays.reset_reclosing(dev_obj)
             trip_count = 1

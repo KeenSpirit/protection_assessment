@@ -125,7 +125,7 @@ class FaultLevelStudy:
         root.geometry(f"{width}x{height}+{x}+{y}")
 
     def mesh_feeder_check(self) -> List[str]:
-        self.app.PrintPlain("Checking for mesh feeders...")
+        self.app.PrintPlain("Checking for radial feeders...")
         grids = self.app.GetCalcRelevantObjects('*.ElmXnet')
         all_feeders = self.app.GetCalcRelevantObjects('*.ElmFeeder')
 
@@ -136,7 +136,10 @@ class FaultLevelStudy:
                     not feeder.IsOutOfService())
         ]
 
-        if not radial_list:
+        if radial_list:
+            self.app.PrintPlain("Radial feeders detected.")
+            self.app.PrintPlain("Please enter the requested inputs.")
+        else:
             self.show_no_radial_feeders_message()
 
         return sorted(radial_list)
