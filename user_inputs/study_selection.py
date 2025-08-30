@@ -44,7 +44,6 @@ def get_study_selections(app):
         "Distribution Fault Level Study",
         "Conductor Damage Assessment",
         "Protection Relay Coordination Plot",
-        "Protection Audit"
     ]
 
     # Study variables and GUI elements

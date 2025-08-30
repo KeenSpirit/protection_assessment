@@ -15,7 +15,6 @@ def short_circuit(app, bound: str, f_type: str, location: Union[object, None] = 
 
     ComShc = app.GetFromStudyCase("Short_Circuit.ComShc")
     study_templates.apply_sc(ComShc, bound, f_type)
-    ComShc.SetAttribute("e:iopt_prot", 0)
     if location:
         ComShc.SetAttribute("e:iopt_allbus", 0)
         ComShc.SetAttribute("e:shcobj", location)

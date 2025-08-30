@@ -4,9 +4,8 @@ from importlib import reload
 reload(fm)
 
 
-def create_fuse(app, relay, system_volts):
+def create_fuse(app, ds_tr, system_volts):
 
-    ds_tr = relay.max_ds_tr
     if ds_tr is None:
         return []
     typfuse = get_fuse_element(app, ds_tr, system_volts)

@@ -19,25 +19,6 @@ def get_active_elements(elements: dict, fault_type: str):
         # 'Phase-Ground', all elements are active
         active_elements = [item for sublist in elements.values() for item in sublist]
 
-    # earth_fault_type = ['1ph', '3I0', 'S3I0', 'd1m', 'I0']
-    # negative_sequence_type = ['I2', '3I2']
-    # phase_type = ['3ph', 'phA', 'phB', 'phC', 'd3m']
-    #
-    # active_elements = []
-    # for element in elements:
-    #     element_type = element.typ_id.atype
-    #     if fault_type == 'Phase-Ground':
-    #         # all elements are active
-    #         active_elements.append(element)
-    #     elif fault_type == '2-Phase':
-    #         if element_type in negative_sequence_type or element_type in phase_type:
-    #             # Only negative sequence and phase elements are active
-    #             active_elements.append(element)
-    #     elif fault_type == '3-Phase':
-    #         if element_type in phase_type:
-    #             # Only phase elements are active
-    #             active_elements.append(element)
-
     return active_elements
 
 

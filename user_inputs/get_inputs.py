@@ -386,7 +386,7 @@ class FaultLevelStudy:
         devices = relays + fuses
 
         feeder_device_dict = {feeder: [] for feeder in radial_list}
-        grid_device_dict = {grid: [] for grid in self.app.GetCalcRelevantObjects('*.ElmXnet')}
+        grid_device_dict = {grid: [] for grid in self.app.GetCalcRelevantObjects('*.ElmXnet') if grid.bus1 is not None}
         for device in devices:
             term = device.cbranch
             feeder = [feeder for feeder in radial_list if
@@ -395,9 +395,15 @@ class FaultLevelStudy:
                 feeder_device_dict[feeder[0]].append(device)
                 continue
             for grid in grid_device_dict:
-                if grid.bus1.cterm == device.cn_bus:
-                    grid_device_dict[grid].append(device)
-                    break
+                try:
+                    grid_term = grid.bus1.cterm
+                    grid_term.SetAttribute("iUsage", 0)
+                    if grid_term == device.cn_bus:
+                        grid_device_dict[grid].append(device)
+                        break
+                except AttributeError:
+                    self.app.PrintPlain(grid)
+                    exit(0)
         return feeder_device_dict, grid_device_dict
 
     def populate(self, frame, feeder_list, feeders_switches, region, button_frame):

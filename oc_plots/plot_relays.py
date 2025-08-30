@@ -1,4 +1,5 @@
 import math
+import time
 from devices import fuses as ds
 from oc_plots import get_rmu_fuses as grf
 from pf_protection_helper import create_obj, obtain_region
@@ -6,6 +7,14 @@ from importlib import reload
 
 
 def plot_all_relays(app, devices, selected_devices, system_volts):
+    """
+
+    :param app:
+    :param devices:
+    :param selected_devices:
+    :param system_volts:
+    :return:
+    """
 
     app.PrintPlain("Generating device time overcurrent plots...")
     new_format = new_page_format(app)
@@ -17,12 +26,20 @@ def plot_all_relays(app, devices, selected_devices, system_volts):
 
     colour_dic = create_colour_dic(devices)
 
-    for device in selected_devices:
-        if device.object.GetClassName() == 'ElmRelay':
-            vipage = create_plot(app, graphics_board, colour_dic, device, system_volts, f_type='Ground')
+    # Organise selected devices into parent terminals. Devices that share a parent terminal will be plotted together.
+    terminals = set(device.term.loc_name for device in selected_devices)
+    device_dic = {
+        terminal:
+            [device for device in selected_devices if device.term.loc_name == terminal]
+        for terminal in terminals
+    }
+
+    for devices in device_dic.values():
+        if any(device.object.GetClassName() == 'ElmRelay' for device in devices):
+            vipage = create_plot(app, graphics_board, colour_dic, devices, system_volts, f_type='Ground')
             create_draw_format(vipage)
-            if device.min_fl_ph > 0:
-               vipage = create_plot(app, graphics_board, colour_dic, device, system_volts, f_type='Phase')
+            if any(device.min_fl_ph > 0 for device in devices):
+               vipage = create_plot(app, graphics_board, colour_dic, devices, system_volts, f_type='Phase')
         else:
             app.PrintPlain('No relays to plot')
 
@@ -34,7 +51,7 @@ def new_page_format(app):
     prjt = app.GetActiveProject()
     settings = prjt.GetContents('Settings.SetFold')[0]
     formats = create_obj(settings, "Page Formats", "SetFoldpage")
-    new_format_name = '210_x_61'
+    new_format_name = 'A4'
     new_format = create_obj(formats, new_format_name, "SetFormat")
 
     return new_format
@@ -50,8 +67,8 @@ def drawing_format(graphics_board, format_graph):
     """
 
     draw_form = create_obj(graphics_board, "Drawing Format", "SetGrfpage")
-    format_graph.iSizeX = 210
-    format_graph.iSizeY = 61
+    format_graph.iSizeX = 297
+    format_graph.iSizeY = 210
     format_graph.iLeft = 0
     format_graph.iRight = 0
     format_graph.iTop = 0
@@ -117,51 +134,71 @@ def create_colour_dic(devices):
     return colour_dic
 
 
-def create_plot(app, graphics_board, colour_dic, relay, system_volts, f_type: str):
+def create_plot(app, graphics_board, colour_dic, devices: list, system_volts, f_type: str):
+    """
 
-    relay_name = relay.object.loc_name
-    app.PrintPlain(relay_name)
+    :param app:
+    :param graphics_board:
+    :param colour_dic:
+    :param devices: list of protection devices with a common parent terminal
+    :param system_volts:
+    :param f_type:
+    :return:
+    """
+
+    date_string = time.strftime("%Y%m%d-%H%M%S")
+
+    devices_name = ""
+    for device in devices:
+        relay_name = device.object.loc_name
+        devices_name = devices_name + "_" + relay_name
+    app.PrintPlain(devices_name)
     # Create the plot graphic object
-    folder_name = f"{relay_name} Coordination Plot"
+    folder_name = f"{devices_name} {f_type} Coordination Plot {date_string}"
     vipage = create_obj(graphics_board, folder_name, "SetVipage")
-    plot_name = f"{relay_name} {f_type} Coordination Plot"
+    plot_name = f"{devices_name} {f_type} Coordination Plot {date_string}"
     plot = vipage.CreateObject("VisOcplot", plot_name)
     plot.Clear()
 
     # Add the max and min constants to the plot
-    min_fl = plot.CreateObject("VisXvalue", f'{relay_name} min fl')
-    max_fl = plot.CreateObject("VisXvalue", f'{relay_name} max fl')
+    min_fl = plot.CreateObject("VisXvalue", f'{devices_name} min fl')
+    max_fl = plot.CreateObject("VisXvalue", f'{devices_name} max fl')
     if f_type == 'Ground':
-        xvalue_settings(min_fl, 'PG Min FL', relay.min_fl_pg)
-        xvalue_settings(max_fl, 'PG Max FL', relay.max_fl_pg)
+        min_fl_value = min(relay.min_fl_pg for relay in devices)
+        max_fl_value = max(relay.max_fl_pg for relay in devices)
+        xvalue_settings(min_fl, 'PG Min FL', min_fl_value)
+        xvalue_settings(max_fl, 'PG Max FL', max_fl_value)
     else:
-        xvalue_settings(min_fl, "Ph Min FL", relay.min_fl_ph)
-        xvalue_settings(max_fl, "Ph Max FL", relay.max_fl_ph)
+        min_fl_value = min(relay.min_fl_ph for relay in devices)
+        max_fl_value = max(relay.max_fl_ph for relay in devices)
+        xvalue_settings(min_fl, "Ph Min FL", min_fl_value)
+        xvalue_settings(max_fl, "Ph Max FL", max_fl_value)
 
     # Add the ds transformer constants to the plot
-    if relay.max_ds_tr is not None:
-        tr_term = relay.max_ds_tr.term
-        max_ds_tr = tr_term.object.cpSubstat.loc_name
-        tr_max_pg = relay.max_ds_tr.max_pg
-        tr_max_ph = relay.max_ds_tr.max_ph
-        max_tr_fl = plot.CreateObject("VisXvalue", f'{max_ds_tr} max fl')
+    max_ds_tr = [device.max_ds_tr for device in devices if device.max_ds_tr is not None][0]
+    if max_ds_tr is not None:
+        tr_term = max_ds_tr.term
+        tr_name = tr_term.object.cpSubstat.loc_name
+        tr_max_pg = max_ds_tr.max_pg
+        tr_max_ph = max_ds_tr.max_ph
+        max_tr_fl = plot.CreateObject("VisXvalue", f'{tr_name} max fl')
         if f_type == 'Ground':
             xvalue_settings(max_tr_fl, 'DS TR PG Max FL', tr_max_pg)
         else:
             xvalue_settings(max_tr_fl, "DS TR Ph Max FL",  tr_max_ph)
-        ds_fuse = ds.create_fuse(app, relay, system_volts)
+        ds_fuse = ds.create_fuse(app, max_ds_tr, system_volts)
         if not ds_fuse:
             app.PrintPlain(
-                f'Downstream max transformer fuse size for {max_ds_tr} '
+                f'Downstream max transformer fuse size for {tr_name} '
                 f'could not be found in PowerFactory'
             )
     else:
         ds_fuse = []
     # Add all the devices to the plot
-    us_device = [device.object for device in relay.us_devices]
-    ds_device = [device.object for device in relay.ds_devices]
+    us_devices = [device.object for device in devices[0].us_devices]
+    ds_devices = [device.object for device in devices[0].ds_devices]
 
-    all_devices = [relay.object] + us_device + ds_device + ds_fuse
+    all_devices = [device.object for device in devices] + us_devices + ds_devices + ds_fuse
 
     for device in all_devices:
         if device.GetClassName() == 'ElmRelay':
@@ -169,7 +206,7 @@ def create_plot(app, graphics_board, colour_dic, relay, system_volts, f_type: st
         else:
             colour = 10      # fuse colour
         plot.AddRelay(device, colour)
-    plot_settings(plot, relay, f_type)
+    plot_settings(plot, devices[0], f_type)
 
     return vipage
 
