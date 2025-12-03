@@ -26,21 +26,38 @@ def short_circuit(app, bound: str, f_type: str, location: Union[object, None] = 
     return ComShc.Execute()
 
 
-def get_line_current(elmlne: object) -> float:
-    if elmlne.HasAttribute('bus1'):
-        Ia1 = elmlne.GetAttribute('m:Ikss:bus1:A')
-        Ib1 = elmlne.GetAttribute('m:Ikss:bus1:B')
-        Ic1 = elmlne.GetAttribute('m:Ikss:bus1:C')
-    if elmlne.HasAttribute('bus2'):
-        Ia2 = elmlne.GetAttribute('m:Ikss:bus2:A')
-        Ib2 = elmlne.GetAttribute('m:Ikss:bus2:B')
-        Ic2 = elmlne.GetAttribute('m:Ikss:bus2:C')
+def get_terminal_current(elmterm: object) -> float:
 
-    if elmlne.HasAttribute('bus1') and elmlne.HasAttribute('bus2'):
-        return round(max(Ia1, Ib1, Ic1, Ia2, Ib2, Ic2))
-    elif elmlne.bus1:
-        return round(max(Ia1, Ib1, Ic1))
-    elif elmlne.bus2:
-        return round(max(Ia2, Ib2, Ic2))
-    else:
-        return None
+    def _check_att(obj, attribute):
+        if obj.HasAttribute(attribute):
+            terminal_fl = round(obj.GetAttribute(attribute) * 1000)
+        else:
+            terminal_fl = 0
+        return terminal_fl
+
+    Ia = _check_att(elmterm, 'm:Ikss:A')
+    Ib = _check_att(elmterm, 'm:Ikss:B')
+    Ic = _check_att(elmterm, 'm:Ikss:C')
+
+    return max(Ia, Ib, Ic)
+
+
+def get_line_current(elmlne: object) -> float:
+    currents = []
+
+    if elmlne.HasAttribute('bus1'):
+        currents.extend([
+            elmlne.GetAttribute('m:Ikss:bus1:A'),
+            elmlne.GetAttribute('m:Ikss:bus1:B'),
+            elmlne.GetAttribute('m:Ikss:bus1:C')
+        ])
+
+    if elmlne.HasAttribute('bus2'):
+        currents.extend([
+            elmlne.GetAttribute('m:Ikss:bus2:A'),
+            elmlne.GetAttribute('m:Ikss:bus2:B'),
+            elmlne.GetAttribute('m:Ikss:bus2:C')
+        ])
+    return round(max(currents) * 1000) if currents else None
+
+

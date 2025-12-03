@@ -1,15 +1,15 @@
 
-def set_up(app):
+def set_up(app, feeder):
 
 
     prjt = app.GetActiveProject()
-    setting_folder = quick_filter_conf(app, prjt)
+    setting_folder = quick_filter_conf(prjt, feeder)
     clear_dpl_attr(app, prjt)
     # Configuration - conditional formatting for colour map.
-    colour_condition_conf(app, setting_folder)
+    colour_condition_conf(setting_folder, feeder)
 
 
-def quick_filter_conf(app, prjt):
+def quick_filter_conf(prjt, feeder):
     """
     PROJECT COLOUR SETTINGS: Provide the parameters and formulae for the colour
     filters.  This will also provide a quick way of filtering to find elements
@@ -18,8 +18,8 @@ def quick_filter_conf(app, prjt):
     # Get the contents of the 'Project Colour Settings' folder.
     setting_folder = prjt.GetContents("*.SetFold", True)[0]
     # Define the variable element to - 'line'.  This will select line elements.
-    name_1 = "Phase Flt Cond Damage"
-    name_2 = "Earth Flt Cond Damage"
+    name_1 = f"{feeder} Phase Flt Cond Damage"
+    name_2 = f"{feeder} Earth Flt Cond Damage"
     elements = ["*.ElmLne"]
 
     # Using the list of filters provided in the main function, a for loop is
@@ -111,7 +111,7 @@ def clear_dpl_attr(app, prjt):
     app.SetGraphicUpdate(1)
 
 
-def colour_condition_conf(app, setting_folder):
+def colour_condition_conf(setting_folder, feeder):
     """
     This function will create the conditional formatting objects under the
     'Settings' tab in the project folder
@@ -119,7 +119,7 @@ def colour_condition_conf(app, setting_folder):
     # Get the contents of the Project 'Colour Settings folder'
     # Define the List of elements that the conditional formatting will be
     # applied to.
-    names = ["Phase Flt Cond Damage", "Earth Flt Cond Damage"]
+    names = [f"{feeder} Phase Flt Cond Damage", f"{feeder} Earth Flt Cond Damage"]
     project_colour_fold = setting_folder.GetContents("*.SetColours", True)[0]
 
     # Define the variable element to - 'line'.  This will select line elements.

@@ -4,14 +4,14 @@ from importlib import reload
 reload(fm)
 
 
-def create_fuse(app, ds_tr, system_volts):
+def create_fuse(app, ds_tr, tr_term_dataclass, sys_volts):
 
     if ds_tr is None:
         return []
-    typfuse = get_fuse_element(app, ds_tr, system_volts)
-    if not typfuse:
+    typfuse = get_fuse_element(app, ds_tr, tr_term_dataclass, sys_volts)
+    if typfuse is None:
         return []
-    fuse_name = ds_tr.term.object.cpSubstat.loc_name
+    fuse_name = ds_tr.term.cpSubstat.loc_name
     equip = app.GetProjectFolder("equip")
     protection = pph.create_obj(equip, "Protection", "IntFolder")
     fuse_folder = pph.create_obj(protection, "Fuses", "IntFolder")
@@ -26,37 +26,36 @@ def create_fuse(app, ds_tr, system_volts):
     return [rel_fuse]
 
 
-def get_fuse_element(app, tfmr: object, system_volts):
+def get_fuse_element(app, tfmr: object, tr_term_dataclass, system_volts):
     """
     Match the transformer size to the fuse type using the appropriate fuse mapping dictionary.
     Matching criteria is specified according to TS0013i: RMU Fuse Selection Guide
     :param app:
     :param tfmr:
+    :param tr_term_dataclass:
     :param system_volts:
     :return:
     """
 
+    def _safe_string(dic, key):
+        try:
+            fuse_string = dic[key]
+        except KeyError:
+            fuse_string = None
+        return fuse_string
+
     fuse_object = None
     region = pph.obtain_region(app)
-    term = tfmr.term
+    term = tr_term_dataclass
     if region == 'SEQ':
         if term.constr == "SWER":
-            try:
-                fuse_string = fm.ex_SWER_f_sizes[tfmr.load_kva]
-            except KeyError:
-                return None
+            fuse_string = _safe_string(fm.ex_SWER_f_sizes, tfmr.load_kva)
         elif term.constr == "OH":
             # OH fuse
             if ph_attr_lookup(term.phases) == 1:
-                try:
-                    fuse_string = fm.ex_pole_1p_fuses[tfmr.load_kva]
-                except KeyError:
-                    return None
+                fuse_string = _safe_string(fm.ex_pole_1p_fuses, tfmr.load_kva)
             else:
-                try:
-                    fuse_string = fm.ex_pole_3p_fuses[tfmr.load_kva]
-                except KeyError:
-                    return None
+                fuse_string = _safe_string(fm.ex_pole_3p_fuses, tfmr.load_kva)
             fuse_types = f_types(app, 0)
         else:
             # RMU fuse
@@ -67,15 +66,9 @@ def get_fuse_element(app, tfmr: object, system_volts):
                     key = f"{tfmr.load_kva} HighZ"
                 else:
                     key = f"{tfmr.load_kva} LowZ"
-                try:
-                    fuse_string = fm.ex_rmu_air_fuses[key]
-                except KeyError:
-                    return None
+                fuse_string = _safe_string(fm.ex_rmu_air_fuses, key)
             else:
-                try:
-                    fuse_string = fm.ex_rmu_oil_fuses[tfmr.load_kva]
-                except KeyError:
-                    return None
+                fuse_string = _safe_string(fm.ex_rmu_oil_fuses, tfmr.load_kva)
             fuse_types = f_types(app, 1)
     else:    # region == 'Regional Models':
         fuse_types = f_types(app, 0)
@@ -84,46 +77,45 @@ def get_fuse_element(app, tfmr: object, system_volts):
             if tfmr.load_kva >= 100:
                 # SWER isolating transformer
                 if round(term_volts) == 11 and round(system_volts) == 11:
-                    fuse_string = fm.ee_swer_isol_tr_11_11[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_11_11, tfmr.load_kva)
                 elif round(term_volts) == 22 and round(system_volts) == 11:
-                    fuse_string = fm.ee_swer_isol_tr_11_127[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_11_127, tfmr.load_kva)
                 elif round(term_volts) == 33 and round(system_volts) == 11:
-                    fuse_string = fm.ee_swer_isol_tr_11_191[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_11_191, tfmr.load_kva)
                 elif round(term_volts) == 22 and round(system_volts) == 22:
-                    fuse_string = fm.ee_swer_isol_tr_22_127[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_22_127, tfmr.load_kva)
                 elif round(term_volts) == 33 and round(system_volts) == 22:
-                    fuse_string = fm.ee_swer_isol_tr_22_191[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_22_191, tfmr.load_kva)
                 elif round(term_volts) == 22 and round(system_volts) == 33:
-                    fuse_string = fm.ee_swer_isol_tr_33_127[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_33_127, tfmr.load_kva)
                 else: # term_volts == 33 and system_volts == 33:
-                    fuse_string = fm.ee_swer_isol_tr_33_191[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_33_191, tfmr.load_kva)
             else:
                 # SWER transformer
                 if round(term_volts) == 11:
-                    fuse_string = fm.ee_swer_dist_tr_11[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_dist_tr_11, tfmr.load_kva)
                 elif round(term_volts) == 22:
-                    fuse_string = fm.ee_swer_dist_tr_127[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_dist_tr_127, tfmr.load_kva)
                 else: # 33kV
-                    fuse_string = fm.ee_swer_dist_tr_191[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_swer_dist_tr_191, tfmr.load_kva)
         else:
             # TR HV fuse
             # Assumed that all TR HV fuses are EDO, because pf doesn't currently contain any OH current limiting fuses
             if round(term_volts) == 11:
                 if ph_attr_lookup(term.phases) == 1:
-                    fuse_string = fm.ee_tr_11_1p[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_tr_11_1p, tfmr.load_kva)
                 else:
-                    fuse_string = fm.ee_tr_11_3p[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_tr_11_3p, tfmr.load_kva)
             elif round(term_volts) == 22:
                 if ph_attr_lookup(term.phases) == 1:
-                    fuse_string = fm.ee_tr_22_1p[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_tr_22_1p, tfmr.load_kva)
                 else:
-                    fuse_string = fm.ee_tr_22_3p[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_tr_22_3p, tfmr.load_kva)
             else:   # 33kV
                 if ph_attr_lookup(term.phases) == 1:
-                    fuse_string = fm.ee_tr_33_1p[tfmr.load_kva]
+                    fuse_string = _safe_string(fm.ee_tr_33_1p, tfmr.load_kva)
                 else:
-                    fuse_string = fm.ee_tr_33_3p[tfmr.load_kva]
-
+                    fuse_string = _safe_string(fm.ee_tr_33_3p, tfmr.load_kva)
     for fuse in fuse_types:
         if fuse.loc_name == fuse_string:
             fuse_object = fuse
@@ -142,16 +134,7 @@ def f_types(app, recursive: int):
     ergon_lib = app.GetGlobalLibrary()
     fuse_folder = ergon_lib.SearchObject(r"\ErgonLibrary\Protection\Fuses.IntFolder")
     fuse_types = fuse_folder.GetContents("*.TypFuse", recursive)
-
-    # Temporary fuse storage location until RMU fuses have been transferred to master folder
-    user = app.GetCurrentUser()
-    database = user.fold_id
-    try:
-        user_fuse_folder = database.SearchObject(f"\\{user}\\_Fuse Models.IntFolder")
-        rmu_fuse_types = user_fuse_folder.GetContents("*.TypFuse", 1)
-        return fuse_types + rmu_fuse_types
-    except Exception:
-        return fuse_types
+    return fuse_types
 
 
 def ph_attr_lookup(attr):
@@ -164,3 +147,30 @@ def ph_attr_lookup(attr):
     for phase, attr_list in phases.items():
         if attr in attr_list:
             return phase
+
+
+def determine_fuse_type(fuse):
+    """This function will observe the fuse location and determine if it is
+    a Distribution transformer fuse, SWER isolating fuse or a line fuse"""
+    # First check is that if the fuse exists in a terminal that is in the
+    # System Overiew then it will be a line fuse.
+    fuse_active = fuse.HasAttribute("r:fold_id:r:obj_id:e:loc_name")
+    if not fuse_active:
+        return True
+    fuse_grid = fuse.cpGrid
+    if (
+            fuse.GetAttribute("r:fold_id:r:cterm:r:fold_id:e:loc_name")
+            == fuse_grid.loc_name
+    ):
+        # This would indicate it is in a line cubical
+        return True
+    if fuse.loc_name not in fuse.GetAttribute("r:fold_id:r:obj_id:e:loc_name"):
+        # This indicates that the fuse is not in a switch object
+        return True
+    secondary_sub = fuse.fold_id.cterm.fold_id
+    contents = secondary_sub.GetContents()
+    for content in contents:
+        if content.GetClassName() == "ElmTr2":
+            return False
+    else:
+        return True

@@ -21,9 +21,9 @@ def rewrite_results(app, lines, fault_type):
             line_energy = line.pg_energy
             dpl_num = "dpl2"
         try:
-            line_type = line.object.typ_id
+            line_type = line.obj.typ_id
             if fault_type == '2-Phase' and 'SWER' in line_type.loc_name:
-                line.object.SetAttribute(f"e:{dpl_num}", 3)
+                line.obj.SetAttribute(f"e:{dpl_num}", 3)
                 continue
         except AttributeError:
             pass
@@ -31,14 +31,14 @@ def rewrite_results(app, lines, fault_type):
             allowable_energy = line.thermal_rating ** 2 * 1
             if line_energy < allowable_energy:
                 # No conductor damage
-                line.object.SetAttribute(f"e:{dpl_num}", 2)
+                line.obj.SetAttribute(f"e:{dpl_num}", 2)
             elif line_energy > allowable_energy:
                 # Conductor damage
-                line.object.SetAttribute(f"e:{dpl_num}", 1)
+                line.obj.SetAttribute(f"e:{dpl_num}", 1)
         except Exception:
             # No data
-            line.object.SetAttribute(f"e:{dpl_num}", 0)
-            logging.exception(f"{line.object.loc_name} No data")
+            line.obj.SetAttribute(f"e:{dpl_num}", 0)
+            logging.exception(f"{line.obj.loc_name} No data")
             logging.info(line.__dict__)
 
 
@@ -58,7 +58,7 @@ def cond_damage_results(devices):
 
     def _damage_test(line, _allowable_fl, no_trips, fault_type):
         try:
-            line_type = line.object.typ_id
+            line_type = line.obj.typ_id
             if fault_type == 'Phase' and 'SWER' in line_type.loc_name:
                 return "SWER"
         except AttributeError:
@@ -80,15 +80,15 @@ def cond_damage_results(devices):
 
     line_list = []
     for device in devices:
-        trips = relays.get_device_trips(device.object)
+        trips = relays.get_device_trips(device.obj)
         list_length = len(device.sect_lines)
         line_df = pd.DataFrame({
             "Device":
-                [device.object.loc_name]*list_length,
+                [device.obj.loc_name]*list_length,
             "Trips":
                 trips,
             "Line":
-                [line.object.loc_name for line in device.sect_lines],
+                [line.obj.loc_name for line in device.sect_lines],
             "Line Type":
                 [line.line_type for line in device.sect_lines],
             "Worst case energy ph flt lvl":

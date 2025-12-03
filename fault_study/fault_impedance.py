@@ -1,3 +1,4 @@
+import script_classes as dd
 
 
 def update_node_construction(devices):
@@ -22,16 +23,16 @@ def update_construction(all_nodes):
         if node.constr is not None:
             continue
         # Get all lines connected to the node
-        line_elements = [ele for ele in node.object.GetConnectedElements() if ele.GetClassName() == 'ElmLne']
+        line_elements = [ele for ele in node.obj.GetConnectedElements() if ele.GetClassName() == dd.ElementType.LINE.value]
         # Sometimes the upstream connection is not a line (can be elmcoup)
         if not line_elements:
             try:
                 substation = node.cpSubstat
                 proxy_node = substation.pBusbar
                 line_elements = [
-                    ele for ele in proxy_node.GetConnectedElements() if ele.GetClassName() == 'ElmLne'
+                    ele for ele in proxy_node.GetConnectedElements() if ele.GetClassName() == dd.ElementType.LINE.value
                 ]
-            except:
+            except (AttributeError, IndexError):
                 line_elements = []
         # For all upstream lines, determine whether they are overhead or underground construction
         for line in line_elements:
@@ -66,4 +67,22 @@ def term_pg_fl(region, term):
             fault_level = term.min_fl_pg50
         else:
             fault_level = term.min_fl_pg10
+    return fault_level
+
+def term_sn_pg_fl(region, term):
+    """
+    Determine the correct terminal minimum phase-ground fault current based on the region and connected line
+    construction
+    :param region:
+    :param term:
+    :return:
+    """
+
+    if region == 'SEQ':
+        fault_level = term.min_sn_fl_pg
+    else:
+        if term.constr == 'OH':
+            fault_level = term.min_sn_fl_pg50
+        else:
+            fault_level = term.min_sn_fl_pg10
     return fault_level

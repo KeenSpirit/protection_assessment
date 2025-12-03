@@ -18,7 +18,7 @@ reload(fault_impedance)
 reload(relays)
 
 
-def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
+def save_dataframe(app, region, study_selections, external_grid, feeders):
     """ saves the dataframe in the user directory.
     If the user is connected through citrix, the file should
     be saved local users PowerFactoryResults folder
@@ -51,11 +51,12 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
         clientpath = Path('c:/LocalData') / user
     filepath = os.path.join(clientpath, filename)
 
-    # Clean and validate data before creating DataFrames
-    grid_data_df = pd.DataFrame(grid_data)
+    # PowerFactory model external grid data read to put in a pd.DataFrame
+    formatted_grid_data = format_grid_data(external_grid)
+    grid_data_df = pd.DataFrame(formatted_grid_data)
     grid_data_df = clean_dataframe(grid_data_df)
 
-    fault_studies_pd = format_fl_results(app, region, all_fault_studies)
+    fault_studies_pd = format_fl_results(app, region, feeders)
 
     if region == 'SEQ':
         oh_z = '0'
@@ -100,26 +101,31 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
                       f'Tabulated fault clearing time shown is for final trip of the trip sequence.')
         safe_set_cell(worksheet, 'A25', 'External Grid Data:')
 
-        i = 0
+        i = 1
         for feeder, key in fault_studies_pd.items():
             study_results = key[0]
-            dfls_list = key[1]
+            fdr_open_points = key[1]
+            dfls_list = key[2]
 
             # Clean the study results DataFrame
             study_results = clean_dataframe(study_results)
+            fdr_open_points = clean_dataframe(fdr_open_points)
 
-            study_results.to_excel(writer, sheet_name='FL Study Results', startrow=i + 1, index=False)
-            sheet = workbook['FL Study Results']
-            sheet[f'A{i + 1}'].font = Font(size=11, bold=True)
-            safe_set_cell(sheet, f'A{i + 1}', fix_string(str(feeder)))
-            i += 15
+            col_letter = get_column_letter(i)
+            study_results.to_excel(writer, sheet_name='Summary Results', startrow=2, startcol=i-1, index=False)
+            fdr_open_points.to_excel(writer, sheet_name='Summary Results', startrow=21, startcol=i-1, index=False)
+            sheet = workbook['Summary Results']
+            sheet[f'{col_letter}1'].font = Font(size=12, bold=True)
+            safe_set_cell(sheet, f'{col_letter}1', fix_string(str(feeder)))
+            study_results_len =len(study_results.columns)
+            i = i + study_results_len + 1
 
             # Create safe sheet name for detailed fault levels
-            safe_feeder_name = create_safe_sheet_name(str(feeder))
+            safe_feeder_name = create_safe_sheet_name(f"{str(feeder)} Detailed Results")
 
             # Detailed Fault Levels sheet
             for j, device in enumerate(dfls_list):
-                count = (j + 1) * 23 - 23
+                count = (j + 1) * 27 - 27
                 device_name = str(device.columns[1]) if len(device.columns) > 1 else "Unknown Device"
 
                 # Clean the device DataFrame and ensure proper numeric types
@@ -134,7 +140,7 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
 
             # Conductor Damage Results
             if 'Conductor Damage Assessment' in study_selections:
-                devices = all_fault_studies[feeder]
+                devices = [fdr.devices for fdr in feeders if fdr.obj.loc_name == feeder][0]
                 cond_damage_df = ar.cond_damage_results(devices)
                 cond_damage_df = clean_dataframe(cond_damage_df)
                 cond_damage_df = ensure_numeric_types(cond_damage_df)
@@ -142,17 +148,16 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
                 sheet_name = create_safe_sheet_name(f"{feeder} Cond Dmg Res")
                 cond_damage_df.to_excel(writer, sheet_name=sheet_name, startrow=0, index=False)
 
-    app.PrintPlain("Adjusting column widths...")
     wb = load_workbook(filepath)
     ws = wb['General Information']
-    adjust_col_width(ws)
-    ws = wb['FL Study Results']
-    adjust_col_width(ws)
+    adjust_gen_info_col_size(ws)
+    ws = wb['Summary Results']
+    adjust_summ_col_size(ws)
     for feeder in fault_studies_pd:
-        safe_feeder_name = create_safe_sheet_name(str(feeder))
+        safe_feeder_name = create_safe_sheet_name(f"{str(feeder)} Detailed Results")
         if safe_feeder_name in wb.sheetnames:
             ws = wb[safe_feeder_name]
-            adjust_col_width(ws)
+            adjust_detailed_col_size(ws)
             if 'Conductor Damage Assessment' in study_selections:
                 sheet_name = create_safe_sheet_name(f"{feeder} Cond Dmg Res")
                 if sheet_name in wb.sheetnames:
@@ -162,6 +167,21 @@ def save_dataframe(app, region, study_selections, grid_data, all_fault_studies):
     # Save the adjusted workbook
     wb.save(filepath)
     app.PrintPlain("Output file saved to " + filepath)
+
+
+def format_grid_data(ext_grid):
+    """
+    :param external_grid:
+    :return:
+    """
+
+    formatted_grid_data = {}
+    for grid, attributes in ext_grid.items():
+        formatted_grid_data['Parameter'] = ['3-P fault level (A):', 'R/X:', 'Z2/Z1:', 'X0/X1:', 'R0/X0:']
+        formatted_grid_data[f'{grid.loc_name} Maximum'] = attributes[:5]
+        formatted_grid_data[f'{grid.loc_name} Minimum'] = attributes[5:10]
+        formatted_grid_data[f'{grid.loc_name} Sys Norm Minimum'] = attributes[-5:]
+    return formatted_grid_data
 
 
 def ensure_numeric_types(df):
@@ -309,7 +329,7 @@ def create_safe_sheet_name(name):
     return name_str
 
 
-def format_fl_results(app, region, all_fault_studies):
+def format_fl_results(app, region, feeders):
     """
 
     :param grid_data:
@@ -318,16 +338,17 @@ def format_fl_results(app, region, all_fault_studies):
     """
 
     fault_studies_pd = {}
-    for feeder, devices in all_fault_studies.items():
-        study_results_df = format_study_results(devices)
-        dfls_list = format_detailed_results(app, region, devices)
+    for feeder in feeders:
+        study_results_df = format_study_results(app, feeder.devices)
+        fdr_open_points = format_fdr_open_points(feeder)
+        dfls_list = format_detailed_results(app, region, feeder.devices)
 
-        fault_studies_pd[feeder] = [study_results_df, dfls_list]
+        fault_studies_pd[feeder.obj.loc_name] = [study_results_df, fdr_open_points, dfls_list]
 
     return fault_studies_pd
 
 
-def format_study_results(devices):
+def format_study_results(app, devices):
     """
 
     :param devices:
@@ -337,8 +358,8 @@ def format_study_results(devices):
     device_list = format_devices()
     # Store results in dictionary:
     for device in devices:
-        ds_device_names = [str(device.object.loc_name) for device in device.ds_devices]
-        us_device_names = [str(device.object.loc_name) for device in device.us_devices]
+        ds_device_names = [str(device.obj.loc_name) for device in device.ds_devices]
+        us_device_names = [str(device.obj.loc_name) for device in device.us_devices]
 
         max_ds_tr = device.max_ds_tr
 
@@ -347,11 +368,15 @@ def format_study_results(devices):
             safe_numeric(device.l_l_volts),
             safe_numeric(device.phases),
             safe_numeric(device.ds_capacity),
-            safe_numeric(device.max_fl_ph),
+            safe_numeric(device.max_fl_3ph),
+            safe_numeric(device.max_fl_2ph),
             safe_numeric(device.max_fl_pg),
-            safe_numeric(device.min_fl_ph),
+            safe_numeric(device.min_fl_3ph),
+            safe_numeric(device.min_fl_2ph),
             safe_numeric(device.min_fl_pg),
-            str(max_ds_tr.term.object.cpSubstat.loc_name) if max_ds_tr.term is not None else '',
+            safe_numeric(device.min_sn_fl_2ph),
+            safe_numeric(device.min_sn_fl_pg),
+            str(max_ds_tr.term.cpSubstat.loc_name) if max_ds_tr.term is not None else '',
             safe_numeric(max_ds_tr.load_kva),
             safe_numeric(max_ds_tr.max_ph),
             safe_numeric(max_ds_tr.max_pg),
@@ -359,14 +384,28 @@ def format_study_results(devices):
             ', '.join(us_device_names),
         ]
 
-        device_list[str(device.object.loc_name)] = device_values
+        device_list[str(device.obj.loc_name)] = device_values
 
-    # Format 'FL Study Results' data
+    # Format 'Summary Results' data
     formatted_dev_pd = pd.DataFrame.from_dict(device_list)
     study_results_df = formatted_dev_pd.fillna("")
 
     return study_results_df
 
+
+def format_fdr_open_points(feeder):
+
+    open_points = feeder.open_points
+    safe_open_points = [str(open_point.loc_name) for open_point in open_points]
+
+    fdr_open_points = {
+        'Feeder Open Points': safe_open_points
+    }
+    # Format open point data
+    formatted_fdr_open_points = pd.DataFrame.from_dict(fdr_open_points)
+    formatted_fdr_open_points = formatted_fdr_open_points.fillna("")
+
+    return formatted_fdr_open_points
 
 def safe_numeric(value):
     """
@@ -399,24 +438,26 @@ def format_detailed_results(app, region, devices):
         device_reach_factors = relays.device_reach_factors(region, device)
 
         # Safely extract device name and terms
-        device_name = str(device.object.loc_name) if device.object is not None else 'Unknown Device'
+        device_name = str(device.obj.loc_name) if device.obj is not None else 'Unknown Device'
         sect_terms = getattr(device, 'sect_terms', [])
 
         df = pd.DataFrame({
             device_name: [
-                str(term.object.loc_name) if term.object is not None else str(term)
+                str(term.obj.loc_name) if term.obj is not None else str(term)
                 for term in sect_terms],
             # Data
             'Construction': [str(getattr(term, 'constr', '')) for term in sect_terms],
             'L-L Voltage': [safe_numeric(getattr(term, 'l_l_volts', 0)) for term in sect_terms],
             'No. Phases': [safe_numeric(getattr(term, 'phases', 0)) for term in sect_terms],
             # FAULT LEVELS
+            'Max 3PH fault': [safe_numeric(getattr(term, 'max_fl_3ph', 0)) for term in sect_terms],
+            'Max 2PH fault': [safe_numeric(getattr(term, 'max_fl_2ph', 0)) for term in sect_terms],
             'Max PG fault': [safe_numeric(getattr(term, 'max_fl_pg', 0)) for term in sect_terms],
-            'Max PH fault': [safe_numeric(getattr(term, 'max_fl_ph', 0)) for term in sect_terms],
-            'Min PG fault': [safe_numeric(fault_impedance.term_pg_fl(region, term)) if hasattr(fault_impedance,
-                                                                                               'term_pg_fl') else np.nan
-                             for term in sect_terms],
-            'Min 2P fault': [safe_numeric(getattr(term, 'min_fl_ph', 0)) for term in sect_terms],
+            'Min 3P fault': [safe_numeric(getattr(term, 'min_fl_3ph', 0)) for term in sect_terms],
+            'Min 2P fault': [safe_numeric(getattr(term, 'min_fl_2ph', 0)) for term in sect_terms],
+            'Min PG fault': [safe_numeric(fault_impedance.term_pg_fl(region, term)) for term in sect_terms],
+            'Min Sys Norm 2P fault': [safe_numeric(getattr(term, 'min_fl_3ph', 0)) for term in sect_terms],
+            'Min Sys NormPG fault': [safe_numeric(fault_impedance.term_sn_pg_fl(region, term)) for term in sect_terms],
             # PICKUPS
             'EF PRI PU': device_reach_factors.get('ef_pickup', []),
             'EF BU PU': device_reach_factors.get('bu_ef_pickup', []),
@@ -439,7 +480,7 @@ def format_detailed_results(app, region, devices):
         if 'Max PG fault' in df.columns and not df.empty:
             try:
                 df_sorted = df.sort_values(by='Max PG fault', ascending=False)
-            except:
+            except AttributeError:
                 df_sorted = df
         else:
             df_sorted = df
@@ -451,7 +492,7 @@ def format_detailed_results(app, region, devices):
             tr_dict = {str(load.term.loc_name): safe_numeric(load.load_kva) for load in device.sect_loads if
                        hasattr(load, 'term') and hasattr(load, 'load_kva')}
             df_sorted['Tfmr Size (kVA)'] = df_sorted[device_name].map(tr_dict)
-        except:
+        except AttributeError:
             # If mapping fails, leave the column with NaN values
             pass
 
@@ -470,11 +511,15 @@ def format_devices() -> dict[str:list]:
             [
                 'L-L Voltage (kV)',
                 'No. Phases',
-                'DS CCapacity  (kVA)',
-                'Max Ph FL',
+                'DS Capacity  (kVA)',
+                'Max 3Ph FL',
+                'Max 2Ph FL',
                 'Max PG FL',
-                'Min Ph FL',
+                'Min 3Ph FL',
+                'Min 2Ph FL',
                 'Min PG FL',
+                'Min SN 2P FL',
+                'Min SN PG FL',
                 'Max DS TR (Site name)',
                 'Max TR size (kVA)',
                 'TR Max Ph ',
@@ -508,7 +553,20 @@ def fix_string(file_name):
     return file_name_str
 
 
-def adjust_col_width(ws):
+def adjust_gen_info_col_size(ws):
+
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"].font = Font(bold=True, size=12)
+
+    for col in ws.columns:
+        col_letter = col[0].column_letter
+        ws.column_dimensions[col_letter].width = 18.0
+
+    for cell in ws[27]:
+        cell.alignment = Alignment(wrap_text=True)
+
+
+def adjust_summ_col_size(ws):
     """
     Adjust column width of given Excel sheet
     :param ws:
@@ -536,6 +594,51 @@ def adjust_col_width(ws):
             # Set the column width to the maximum length found
             adjusted_width = (max_length + 2)
             ws.column_dimensions[column].width = adjusted_width
+
+
+def adjust_detailed_col_size(ws):
+    """
+    Adjust column width of given Excel sheet
+    :param ws:
+    :return:
+    """
+
+    # Set second row height to 30.00
+    ws.row_dimensions[2].height = 30.00
+
+    # Apply "Wrap Text" formatting to cells in the second row
+    for cell in ws[2]:  # Get all cells in row 2
+        cell.alignment = Alignment(wrap_text=True)
+
+    # Adjust the column widths
+    device_col_letter = None
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter  # Get the column name
+
+        second_row_cell = col[1] if len(col) > 1 else None
+        tfmr_column = (second_row_cell and second_row_cell.value and str(second_row_cell.value) == "Tfmr Size (kVA)")
+        if tfmr_column:
+            ws.column_dimensions[column].width = 13.71
+            second_row_cell = col[1]
+            tr_col_num = second_row_cell.column
+            tr_col_letter = second_row_cell.column_letter
+            device_col_num = tr_col_num + 1
+            device_col_letter = get_column_letter(device_col_num)
+        elif column == device_col_letter:
+            # Iterate over all cells in the column to find the maximum length
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+
+            # Set the column width to the maximum length found
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column].width = adjusted_width
+        else:
+            ws.column_dimensions[column].width = 15
 
 
 def adjust_cond_damage_col_width(ws):
@@ -579,7 +682,7 @@ def adjust_cond_damage_col_width(ws):
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
-                except:
+                except (AttributeError, ValueError):
                     pass
 
             # Set the column width to the maximum length found

@@ -1,6 +1,6 @@
 import math
 from fault_study import fault_impedance
-
+import script_classes as dd
 
 def get_active_elements(elements: dict, fault_type: str):
     """
@@ -96,7 +96,7 @@ def get_measured_current(element, fault_level, fault_type):
     elif MeasurementType in ['3I2']:  # 3 x neg seq current
         return convert_to_i2(fault_level, fault_type, threei2=True)
     else:
-        # If an unhandelled measurement type ie encountered return the 3 phase current
+        # If an unhandled measurement type ie encountered return the 3 phase current
         return fault_level
 
 
@@ -152,12 +152,12 @@ def convert_to_i0(fault_current, threei0=False):
 def get_device_trips(device):
     """Get number of trips for each device."""
 
-    if device.GetClassName() == 'ElmRelay':
-        try:
-            reclosing_element = device.GetContents("*.RelRecl", True)[0]
-            trips = reclosing_element.GetAttribute("oplockout")
-        except IndexError:
-            trips = 1  # It's a feeder relay
+    if device.GetClassName() == dd.ElementType.RELAY.value:
+        ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
+        if len(ElmRecls) == 0 or ElmRecls[0].outserv or ElmRecls[0].reclnotactive:
+            trips = 1
+        elif len(ElmRecls) == 1:
+            trips = ElmRecls[0].GetAttribute("oplockout")
     else:
         trips = 1  # device  is a fuse
     return trips
@@ -165,7 +165,7 @@ def get_device_trips(device):
 
 def reset_reclosing(ElmRelay):
 
-    if ElmRelay.GetClassName() == 'ElmRelay':
+    if ElmRelay.GetClassName() == dd.ElementType.RELAY.value:
         ElmRecls = ElmRelay.GetChildren(0, '*.RelRecl', 1)
         for ElmRecl in ElmRecls:
             ElmRecl.starttimeframe = 1
@@ -182,7 +182,7 @@ def trip_count(device, increment=True):
         else:
             trip = 1        # device is probably a fuse
     else:
-        assert len(ElmRecls) == 1, 'Multiple reclose elements found'
+        assert len(ElmRecls) == 1, f'{device.obj} Multiple reclose elements found'
         ElmRecl = ElmRecls[0]
         if increment:
             ElmRecl.starttimeframe += 1
@@ -193,7 +193,7 @@ def trip_count(device, increment=True):
 def set_enabled_elements(app, device):
     """For a given device, set out of service the elements disabled for the current auto-reclose iteration"""
 
-    if device.GetClassName() != 'ElmRelay':
+    if device.GetClassName() != dd.ElementType.RELAY.value:
         return False
     ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
     if len(ElmRecls) == 0:
@@ -247,9 +247,9 @@ def device_reach_factors(region, device):
     """
 
     # PRIMARY PICKUPS
-    ef_pickup = determine_pickup_values(device.object)[1]
-    ph_pickup = determine_pickup_values(device.object)[0]
-    nps_pickup = determine_pickup_values(device.object)[2]
+    ef_pickup = determine_pickup_values(device.obj)[1]
+    ph_pickup = determine_pickup_values(device.obj)[0]
+    nps_pickup = determine_pickup_values(device.obj)[2]
 
     # Phase elements can see earth faults
     if ef_pickup > 0 and ph_pickup > 0:
@@ -275,7 +275,7 @@ def device_reach_factors(region, device):
     else:
         ef_rf = ['NA'] * len(device.sect_terms)
     if ph_pickup > 0:
-        ph_rf = [round(term.min_fl_ph / ph_pickup, 2) for term in device.sect_terms]
+        ph_rf = [round(term.min_fl_2ph / ph_pickup, 2) for term in device.sect_terms]
     else:
         ph_rf = ['NA'] * len(device.sect_terms)
     if nps_pickup > 0:
@@ -289,7 +289,7 @@ def device_reach_factors(region, device):
             else:
                 # There is SWER, the device sees 2 phase fault current
                 nps_ef_rf.append(round(device_fl / math.sqrt(3) / nps_pickup, 2))
-        nps_ph_rf = [round(term.min_fl_ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
+        nps_ph_rf = [round(term.min_fl_2ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
     else:
         nps_ef_rf = ['NA'] * len(device.sect_terms)
         nps_ph_rf = ['NA'] * len(device.sect_terms)
@@ -302,9 +302,9 @@ def device_reach_factors(region, device):
         bu_ph_pickup = None
         bu_nps_pickup = None
         for bu_device in bu_devices:
-            bu_ef_pickup_bu_device = determine_pickup_values(bu_device.object)[1]
-            bu_ph_pickup_bu_device = determine_pickup_values(bu_device.object)[0]
-            bu_nps_pickup_bu_device = determine_pickup_values(bu_device.object)[2]
+            bu_ef_pickup_bu_device = determine_pickup_values(bu_device.obj)[1]
+            bu_ph_pickup_bu_device = determine_pickup_values(bu_device.obj)[0]
+            bu_nps_pickup_bu_device = determine_pickup_values(bu_device.obj)[2]
             if not bu_ef_pickup or (bu_ef_pickup and bu_ef_pickup_bu_device < bu_ef_pickup):
                 bu_ef_pickup = bu_ef_pickup_bu_device
             if not bu_ph_pickup or (bu_ph_pickup and bu_ph_pickup_bu_device < bu_ph_pickup):
@@ -336,7 +336,7 @@ def device_reach_factors(region, device):
         else:
             bu_ef_rf = ['NA'] * len(device.sect_terms)
         if bu_ph_pickup > 0:
-            bu_ph_rf = [round(term.min_fl_ph / bu_ph_pickup, 2) for term in device.sect_terms]
+            bu_ph_rf = [round(term.min_fl_2ph / bu_ph_pickup, 2) for term in device.sect_terms]
         else:
             bu_ph_rf = ['NA'] * len(device.sect_terms)
         if bu_nps_pickup > 0:
@@ -350,7 +350,7 @@ def device_reach_factors(region, device):
                 else:
                     # There is SWER, the device sees 2 phase fault current
                     bu_nps_ef_rf.append(round(bu_device_fl / math.sqrt(3) / bu_nps_pickup, 2))
-            bu_nps_ph_rf = [round(term.min_fl_ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]
+            bu_nps_ph_rf = [round(term.min_fl_2ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]
         else:
             bu_nps_ef_rf = ['NA'] * len(device.sect_terms)
             bu_nps_ph_rf = ['NA'] * len(device.sect_terms)
@@ -389,7 +389,7 @@ def determine_pickup_values(device_pf):
     reach factor."""
     # If the devices is a fuse then it will have a known size. A fuse factor
     # of two will be applied
-    if device_pf.GetClassName() == "RelFuse":
+    if device_pf.GetClassName() == dd.ElementType.FUSE.value:
         fuse_size = int(device_pf.GetAttribute("r:typ_id:e:irat"))
         setting_values = [fuse_size * 2, fuse_size * 2, 0]
         return setting_values

@@ -2,6 +2,7 @@ import math
 from devices import relays
 from cond_damage import conditional_formatting as cf
 from cond_damage import apply_results as ar
+import script_classes as dd
 import logging
 
 from importlib import reload
@@ -10,12 +11,12 @@ reload(cf)
 reload(ar)
 
 
-def cond_damage(app, devices):
+def cond_damage(app, feeder, devices):
 
-    cf.set_up(app)
+    cf.set_up(app, feeder)
     fl_step = 10
     for device in devices:
-        dev_obj = device.object
+        dev_obj = device.obj
         lines = device.sect_lines
         total_trips = relays.get_device_trips(dev_obj)
         fault_type = '2-Phase'
@@ -66,6 +67,9 @@ def cond_damage(app, devices):
                                  f"fault clearing time calculation error.")
             line.pg_energy = total_energy
         ar.rewrite_results(app, lines, line_fault_type)
+    app.PrintPlain(
+        f"Conductor damage results saved in PowerFactory as used-defined diagram colouring schemes, '{feeder} Earth Flt Cond Damage' and '{feeder} Phase Flt Cond Damage'."
+    )
 
 
 def fault_clear_times(app, device, line, fl_step, fault_type):
@@ -81,13 +85,13 @@ def fault_clear_times(app, device, line, fl_step, fault_type):
     """
 
     if fault_type in ['2-Phase', '3-Phase']:
-        min_fl = line.min_fl_ph
-        max_fl = line.max_fl_ph
+        min_fl = line.min_fl_2ph
+        max_fl = max(line.max_fl_2ph, line.max_fl_3ph)
     else:
         # Check if this is a SWER line, and does the device see the same current?
         min_fl, max_fl, fault_type = swer_transform(app, device, line, fault_type)
 
-    device_obj = device.object
+    device_obj = device.obj
     # Create a list of fault levels in the interval of min and max fault
     # currents. Two intervals may be assessed:
     # fl_interval_1 is composed of equidistant step sizes between
@@ -101,7 +105,7 @@ def fault_clear_times(app, device, line, fl_step, fault_type):
 
     # Select only the elements capable of detecting the fault type
     # and enabled for the current auto-reclose iteration
-    if device_obj.GetClassName() == 'RelFuse':
+    if device_obj.GetClassName() == dd.ElementType.FUSE.value:
         active_elements = [device_obj]
     else:
         elements = relays.get_prot_elements(device_obj)
@@ -116,14 +120,14 @@ def fault_clear_times(app, device, line, fl_step, fault_type):
     for element in active_elements:
         for fault_level in fl_interval_1:
             # Calculate protection operate time for element and fl
-            if element.GetClassName() == 'RelFuse':
+            if element.GetClassName() == dd.ElementType.FUSE.value:
                 operate_time = fuse_clear_time(element, fault_level)
                 switch_operate_time = 0
             else:
                 element_current = relays.get_measured_current(
                     element, fault_level, fault_type)
                 operate_time = element_trip_time(element, element_current)
-                switch_operate_time = 0.05
+                switch_operate_time = 0.08
             if not operate_time or operate_time <= 0:
                 continue
             clear_time = operate_time + switch_operate_time
@@ -145,10 +149,10 @@ def swer_transform(app, device, line, fault_type):
     :return:
     """
 
-    min_fl = line.min_fl_pg
-    max_fl = line.max_fl_pg
+    min_fl = line.min_fl_2ph
+    max_fl = max(line.max_fl_2ph, line.max_fl_3ph)
 
-    line_type = line.object.typ_id
+    line_type = line.obj.typ_id
     if (('SWER' in line_type.loc_name)
             and line.phases == 1
             and device.phases > 1):

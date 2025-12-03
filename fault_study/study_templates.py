@@ -1,7 +1,7 @@
 """ Templates for different studies
 """
 
-from dataclasses import dataclass
+from script_classes import dataclass
 
 
 @dataclass

@@ -1,5 +1,7 @@
+import script_classes as dd
 
-def get_floating_terminals(feeder, devices) -> dict[object:dict[object:object]]:
+
+def get_floating_terminals(app, feeder, devices) -> dict[object:dict[object:object]]:
     """
     Outputs all floating terminal objects with their associated line objects for all devices
     :param feeder:
@@ -10,18 +12,18 @@ def get_floating_terminals(feeder, devices) -> dict[object:dict[object:object]]:
     floating_terms= {}
     floating_lines = find_end_points(feeder)
     for device in devices:
-        terms = [term.object for term in device.sect_terms]
-        floating_terms[device.object] = {}
+        terms = [term.obj for term in device.sect_terms]
+        floating_terms[device.term] = {}
         for line in floating_lines:
             try:
                 t1, t2 = line.GetConnectedElements()
-            except:
+            except AttributeError:
                 continue
             t3 = line.GetConnectedElements(1,1,0)
             if len(t3) == 1 and t3[0] == t2 and t2 in terms and t1 not in terms:
-                floating_terms[device.object][line] = t1
+                floating_terms[device.term][line] = t1
             elif len(t3) == 1 and t3[0] == t1 and t1 in terms and t2 not in terms:
-                floating_terms[device.object][line] = t2
+                floating_terms[device.term][line] = t2
 
     return floating_terms
 
@@ -38,27 +40,26 @@ def find_end_points(feeder: object) -> list[object]:
     # Get all the sections that make up the selected feeder.
     feeder_lines = feeder.GetObjs('ElmLne')
 
-    for ElmLne in feeder_lines:
-        if ElmLne.bus1:
-            bus1 = [x.obj_id for x in ElmLne.bus1.cterm.GetConnectedCubicles()
-                    if x is not ElmLne.bus1
-                    if x.obj_id.GetClassName() == 'ElmLne']
+    for elmlne in feeder_lines:
+        if (elmlne.GetAttribute('bus1') is not None
+                and elmlne.bus1.GetAttribute('cterm') is not None):
+            bus1 = [x.GetAttribute('obj_id') for x in elmlne.bus1.cterm.GetConnectedCubicles()
+                    if x is not elmlne.GetAttribute('bus1')
+                    if x.obj_id.GetClassName() == dd.ElementType.LINE.value]
         else:
             bus1 = []
-
-        if ElmLne.bus2:
-            if ElmLne.bus2.HasAttribute('cterm'):
-                bus2 = [x.obj_id for x in ElmLne.bus2.cterm.GetConnectedCubicles()
-                        if x is not ElmLne.bus2
-                        if x.obj_id.GetClassName() == 'ElmLne']
-            else:
-                bus2 = []
+        if (elmlne.GetAttribute('bus2') is not None
+                and elmlne.bus2.GetAttribute('cterm')is not None):
+            bus2 = [x.GetAttribute('obj_id') for x in elmlne.bus2.cterm.GetConnectedCubicles()
+                    if x is not elmlne.GetAttribute('bus2')
+                    if x.obj_id.GetClassName() == dd.ElementType.LINE.value]
         else:
             bus2 = []
 
         if len(bus1) == 1 or len(bus2) == 1 \
-                or (len(bus1) > 1 and ElmLne not in bus1) \
-                or (len(bus2) > 1 and ElmLne not in bus2):
-            floating_lines.append(ElmLne)
+                or (len(bus1) > 1 and elmlne not in bus1) \
+                or (len(bus2) > 1 and elmlne not in bus2):
+            floating_lines.append(elmlne)
 
     return floating_lines
+

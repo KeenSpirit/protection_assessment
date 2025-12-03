@@ -3,7 +3,7 @@ import sys
 
 def chk_empty_fdrs(app, feeders_devices):
     """
-
+    Check that the selected feeders have protection devices created.
     :param app:
     :param feeders_devices:
     :return:
@@ -31,34 +31,34 @@ def relay_checks(app, relays) -> dict:
             continue
         relay_issues_detected = relay_type_check(device, relay_issues_detected)
         if not relay_issues_detected:
-            relay_issues_detected = ct_phase_check(app, device, relay_issues_detected)
+            relay_issues_detected = ct_phase_check(device, relay_issues_detected)
     if relay_issues_detected:
         app.PrintWarn(f"Warnings: {relay_issues_detected}")
 
 
 def relay_type_check(elmrelay, relay_issues_detected):
     """
-    Must have relay type assigned
+    The relay must have relay type assigned
     :param elmrelay:
     :param relay_issues_detected:
     :return:
     """
 
-    if not elmrelay.GetAttribute("e:typ_id"):
+    if elmrelay.GetAttribute("e:typ_id") is None:
         _add_issue(
-            relay_issues_detected, elmrelay.loc_name, "typ_id"
+            relay_issues_detected, elmrelay.loc_name, f"{elmrelay} has no typ_id assigned"
         )
     return relay_issues_detected
 
 
-def ct_phase_check(app, elmrelay, relay_issues_detected) -> dict:
+def ct_phase_check(elmrelay, relay_issues_detected) -> dict:
     """
     Each relay must have a CT wired to it, and the relay measured phase count must equal the CT phase count.
     """
     # elmrelay CT must be present.
-    if not elmrelay.GetAttribute("e:cpCt"):
+    if elmrelay.GetAttribute("e:cpCt") is None:
         _add_issue(
-            relay_issues_detected, elmrelay.loc_name, "cpCt"
+            relay_issues_detected, elmrelay.loc_name, f"{elmrelay} has no CT assigned"
         )
     else:
         # elmrelay CT phase count must match relay measured phases
@@ -70,11 +70,11 @@ def ct_phase_check(app, elmrelay, relay_issues_detected) -> dict:
         one_phase = ['1rms', '1pui', '1ph', 'selr']
         if ct_phases == 3 and measure_type in one_phase:
             _add_issue(
-                relay_issues_detected, ct.loc_name, "iphase"
+                relay_issues_detected, ct.loc_name, f"{elmrelay} measured phase count != CT phase count"
             )
         if ct_phases == 1 and measure_type in three_phase:
             _add_issue(
-                relay_issues_detected, ct.loc_name, "iphase"
+                relay_issues_detected, ct.loc_name, f"{elmrelay} measured phase count != CT phase count"
             )
     return relay_issues_detected
 

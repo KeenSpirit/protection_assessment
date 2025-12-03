@@ -3,23 +3,24 @@ import powerfactory as pf
 from pf_protection_helper import *
 import model_checks
 from fault_study import fault_level_study as fs, fault_level_study as tm
-from user_inputs import get_inputs as gi
-from user_inputs import study_selection as ss
+from fdr_open_points import get_open_points as gop
+import script_classes as dd
+from user_inputs import get_inputs as gi, study_selection as ss
+from legacy_script import script_bridge as sb
 import oc_plots
-from importlib import reload
-reload(oc_plots)
 from oc_plots import plot_relays as pr, get_rmu_fuses as grf
 from devices import fuses as ds
-from devices import dataclass_definitions as dd
 from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 import logging.config
 from logging_config import configure_logging as cl
 from test_package import test_module
 
-# from importlib import reload
+from importlib import reload
+reload(oc_plots)
 reload(model_checks)
 reload(gi)
+reload(gop)
 reload(fs)
 reload(pr)
 reload(ds)
@@ -29,6 +30,7 @@ reload(sr)
 reload(ss)
 reload(grf)
 reload(test_module)
+reload(sb)
 
 
 def main(app):
@@ -42,63 +44,67 @@ def main(app):
     all_relays = get_all_relays(app)
     model_checks.relay_checks(app, all_relays)
 
+    # Turn on all grids momentarily to load all floating terminals in to line connected elements
+    user_selected_study_case = app.GetActiveStudyCase()
+    switch_study_case(app, user_selected_study_case, all_grids=True)
+    switch_study_case(app, user_selected_study_case, all_grids=False)
+
     region = obtain_region(app)
     # with temporary_variation(app):
-    study_selections = ss.get_study_selections(app)
-    feeders_devices, bu_devices, user_selection, _ = gi.get_input(app, region, study_selections)
+    study_selections = ss.get_study_selections(app, region)
+    feeders_devices, bu_devices, user_selection, external_grid = gi.get_input(app, region, study_selections)
 
     feeders_devices = model_checks.chk_empty_fdrs(app, feeders_devices)
+    feeders = cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices)
 
-    feeders_devices = convert_to_dataclass(feeders_devices)
-    bu_devices = convert_to_dataclass(bu_devices)
-
-    all_fault_studies = {}
-    for feeder, devices in feeders_devices.items():
-        feeder_obj = app.GetCalcRelevantObjects(feeder + ".ElmFeeder")[0]
-        devices = fs.fault_study(app, region, feeder_obj, bu_devices, devices)
+    for feeder in feeders:
+        gop.get_open_points(app, feeder)
+        fs.fault_study(app, external_grid, region, feeder)
         if user_selection:
-            selected_devices = [device for device in devices if device.object in user_selection[feeder]]
+            selected_devices = [device for device in feeder.devices if device.obj in user_selection[feeder.obj.loc_name]]
             if 'Conductor Damage Assessment' in study_selections:
-                cd.cond_damage(app, selected_devices)
+                cd.cond_damage(app, feeder.obj.loc_name, selected_devices)
             if 'Protection Relay Coordination Plot' in study_selections:
-                system_volts = feeder_obj.cn_bus.uknom
-                pr.plot_all_relays(app, devices, selected_devices, system_volts)
-        all_fault_studies[feeder] = devices
-    gen_info = gi.get_grid_data(app)
-    sr.save_dataframe(app, region, study_selections, gen_info, all_fault_studies)
+                pr.plot_all_relays(app, feeder, selected_devices)
+    if "Legacy Script" in study_selections:
+        sb.bridge_results(app, external_grid, feeders)
+    else:
+        sr.save_dataframe(app, region, study_selections, external_grid, feeders)
 
 
-def convert_to_dataclass(dictionary):
+def switch_study_case(app, user_selected_study_case, all_grids=False):
+
+    if user_selected_study_case is None:
+        app.PrintError('Please select a study case.')
+        exit(1)
+    if all_grids:
+        int_case = app.GetProjectFolder("study").GetContents("All Active Grids Study Case")[0]
+    else:
+        int_case = user_selected_study_case
+    int_case.Activate()
+
+
+def cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices):
     """
-    Convert a dictionary pf protection elements in to a dictionary of device dataclasses
-    :param dictionary:
+    Convert a dictionary pf protection elements in to a list of feeder dataclasses
+    :param app:
+    :param feeders_devices:
+    :param bu_devices:
     :return:
     """
 
-    new_dictionary = {}
-    for key, value in dictionary.items():
-        new_dictionary[key] = [
-        dd.Device(
-            element,
-            element.fold_id,
-            element.fold_id.cterm,
-            ds.ph_attr_lookup(element.fold_id.cterm.phtech),
-            round(element.fold_id.cterm.uknom, 2),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            [],
-            [],
-            [],
-            [],
-            []
-            )
-        for element in value
-        ]
-    return new_dictionary
+    if bu_devices:
+        for grid, grid_devices in bu_devices.items():
+            bu_devices[grid] = [dd.initialise_dev_dataclass(device) for device in grid_devices]
+    feeders = []
+    for fdr, devs in feeders_devices.items():
+        feeder = app.GetCalcRelevantObjects(fdr + ".ElmFeeder")[0]
+        feeder = dd.initialise_fdr_dataclass(feeder)
+        devices = [dd.initialise_dev_dataclass(dev) for dev in devs]
+        feeder.devices = devices
+        feeder.bu_devices = bu_devices
+        feeders.append(feeder)
+    return feeders
 
 
 def get_all_relays(app):
