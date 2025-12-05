@@ -26,7 +26,7 @@ def cond_damage(app, feeder, devices):
             trip_count = 1
             total_energy = 0
             while trip_count <= total_trips:
-                block_service_status = relays.set_enabled_elements(app, dev_obj)
+                block_service_status = relays.set_enabled_elements(dev_obj)
                 min_fl_clear_times, _ = fault_clear_times(app, device, line, fl_step, fault_type)
                 max_energy, max_fl, max_clear_time = worst_case_energy(line, min_fl_clear_times, fault_type, device,
                                                                        False)
@@ -49,7 +49,7 @@ def cond_damage(app, feeder, devices):
             trip_count = 1
             total_energy = 0
             while trip_count <= total_trips:
-                block_service_status = relays.set_enabled_elements(app, dev_obj)
+                block_service_status = relays.set_enabled_elements(dev_obj)
                 min_fl_clear_times, device_fault_type = fault_clear_times(app, device, line, fl_step, line_fault_type)
                 transposition = False
                 if line_fault_type != device_fault_type:
@@ -288,12 +288,12 @@ def element_trip_time(element, flt_cur):
             a2 = curve_var[1][0]
             a3 = curve_var[2][0]
             a4 = curve_var[3][0]
-            op_time = time_dial * (a1 / ((flt_cur / pickup) ^ a2 - a3) + a4)
+            op_time = time_dial * (a1 / ((flt_cur / pickup) ** a2 - a3) + a4)
         # ANSI/IEEE squared
         elif curve_type == 3:
             a1 = curve_var[0][0]
             a2 = curve_var[1][0]
-            op_time = (time_dial * a1 + a2)/((flt_cur / pickup) ^ 2)
+            op_time = (time_dial * a1 + a2)/((flt_cur / pickup) ** 2)
         # ABB/Westinghouse
         elif curve_type == 4:
             a1 = curve_var[0][0]
@@ -302,7 +302,7 @@ def element_trip_time(element, flt_cur):
             a4 = curve_var[3][0]
             a5 = curve_var[4][0]
             if (flt_cur / pickup) >= 1.5:
-                op_time = ((a1 + a2)/(((flt_cur / pickup) - a3) ^ a4)
+                op_time = ((a1 + a2)/(((flt_cur / pickup) - a3) ** a4)
                            * time_dial / 24000)
             else:
                 op_time = a5 / (flt_cur / pickup - 1) * time_dial / 24000
@@ -349,7 +349,7 @@ def element_trip_time(element, flt_cur):
             b2 = curve_var[4][0]
             b3 = curve_var[5][0]
             op_time = ((time_dial * a1) / (((flt_cur / pickup) + b1)
-                                           ^ b2 + b3)
+                                           ** b2 + b3)
                        + time_dial * a2 + a3)
         # I sqr T (based on Ir)
         elif curve_type == 9:

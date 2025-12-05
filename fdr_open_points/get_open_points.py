@@ -1,33 +1,38 @@
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
+from typing import List, Dict
 from fdr_open_points import fdr_open_user_input as foui
 import script_classes as dd
+from importlib import reload
+reload(foui)
 
-
-def main(app):
+def main(app: pft.Application):
 
     # Enables the user to manually stop the script
     app.SetEnableUserBreak(1)
     app.ClearOutputWindow()
-    # TODO: needs work
     radial_dic = foui.mesh_feeder_check(app)
     feeder_list = foui.get_feeders(app, radial_dic)
-    for feeder in feeder_list:
-        open_switches = get_open_points(app, feeder)
-        app.PrintPlain(f"Feeder {feeder} open points:")
-        if open_switches:
-            for site, switch in open_switches.items():
+    for fdr in feeder_list:
+        feeder = app.GetCalcRelevantObjects(fdr + ".ElmFeeder")[0]
+        feeder = dd.initialise_fdr_dataclass(feeder)
+        get_open_points(app, feeder)
+        app.PrintPlain(f"Feeder {feeder.obj} open points:")
+        if feeder.open_points:
+            for site, switch in feeder.open_points.items():
                 if switch.GetClassName() == dd.ElementType.SWITCH.value:
                     app.PrintPlain(f"\t{switch}")
                 else:
                     app.PrintPlain(f"\t{site} / {switch}")
         else:
             app.PrintPlain(f"\t(None detected)")
-        app.PrintPlain(f"Feeder {feeder} Lines out of service:")
     app.PrintPlain("NOTE: Open points to adjacent bulk supply substations may not be "
                    "detected unless the relevant grids are active under the current "
                    "project")
 
 
-def get_open_points(app, feeder):
+def get_open_points(app:pft.Application, feeder: dd.Feeder):
 
     all_staswitch = app.GetProjectFolder("netdat").GetContents("*.StaSwitch", 1)
     all_elmcoup = app.GetProjectFolder("netdat").GetContents("*.ElmCoup", 1)

@@ -1,13 +1,16 @@
 from typing import Union
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 from fault_study import study_templates
 
 
-def short_circuit(app, bound: str, f_type: str, location: Union[object, None] = None, ppro: int = 0) -> object:
+def short_circuit(app, bound: str, f_type: str, location: Union[pft.ElmTerm, None] = None, ppro: int = 0) -> pft.ComShc:
     """
     Set the Short-circuit command module and perform a short-circuit calculation
     :param app:
     :param bound: 'Max', 'Min'
-    :param f_type: '3 Phase', '2 Phase', 'Ground'
+    :param f_type: '3-Phase', '2-Phase', "Phase-Ground"
     :param location: element location of fault. None if All Busbars
     :param ppro: fault distance from terminal
     :return: Short-Circuit Command
@@ -26,7 +29,7 @@ def short_circuit(app, bound: str, f_type: str, location: Union[object, None] = 
     return ComShc.Execute()
 
 
-def get_terminal_current(elmterm: object) -> float:
+def get_terminal_current(elmterm: pft.ElmTerm) -> float:
 
     def _check_att(obj, attribute):
         if obj.HasAttribute(attribute):
@@ -42,7 +45,7 @@ def get_terminal_current(elmterm: object) -> float:
     return max(Ia, Ib, Ic)
 
 
-def get_line_current(elmlne: object) -> float:
+def get_line_current(elmlne: pft.ElmLne) -> float:
     currents = []
 
     if elmlne.HasAttribute('bus1'):

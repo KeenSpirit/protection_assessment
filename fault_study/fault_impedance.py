@@ -1,13 +1,17 @@
+import sys
+from typing import List, Union
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 import script_classes as dd
 
 
-def update_node_construction(devices):
+def update_node_construction(devices: List[dd.Device]):
 
     all_nodes = get_all_terms(devices)
     update_construction(all_nodes)
 
 
-def get_all_terms(devices):
+def get_all_terms(devices: List[dd.Device]) -> List[dd.Termination]:
 
     all_nodes = []
     for device in devices:
@@ -17,7 +21,7 @@ def get_all_terms(devices):
     return all_nodes
 
 
-def update_construction(all_nodes):
+def update_construction(all_nodes: List[dd.Termination]):
 
     for node in all_nodes:
         if node.constr is not None:
@@ -51,7 +55,7 @@ def update_construction(all_nodes):
             node.constr = "OH"
 
 
-def term_pg_fl(region, term):
+def term_pg_fl(region: str, term: dd.Termination) -> float:
     """
     Determine the correct terminal minimum phase-ground fault current based on the region and connected line
     construction
@@ -69,7 +73,7 @@ def term_pg_fl(region, term):
             fault_level = term.min_fl_pg10
     return fault_level
 
-def term_sn_pg_fl(region, term):
+def term_sn_pg_fl(region: str, term: dd.Termination) -> float:
     """
     Determine the correct terminal minimum phase-ground fault current based on the region and connected line
     construction

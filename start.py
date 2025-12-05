@@ -1,15 +1,19 @@
 import time
 import powerfactory as pf
-from pf_protection_helper import *
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
+from typing import Union, Dict, List
+import pf_protection_helper as helper
 import model_checks
 from fault_study import fault_level_study as fs, fault_level_study as tm
 from fdr_open_points import get_open_points as gop
+from find_substation import find_sub
 import script_classes as dd
 from user_inputs import get_inputs as gi, study_selection as ss
 from legacy_script import script_bridge as sb
-import oc_plots
 from oc_plots import plot_relays as pr, get_rmu_fuses as grf
-from devices import fuses as ds
+from devices import fuses as ds, relays
 from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 import logging.config
@@ -17,13 +21,13 @@ from logging_config import configure_logging as cl
 from test_package import test_module
 
 from importlib import reload
-reload(oc_plots)
 reload(model_checks)
 reload(gi)
 reload(gop)
 reload(fs)
 reload(pr)
 reload(ds)
+reload(relays)
 reload(cd)
 reload(tm)
 reload(sr)
@@ -31,31 +35,43 @@ reload(ss)
 reload(grf)
 reload(test_module)
 reload(sb)
+reload(find_sub)
 
 
-def main(app):
+def main(app: pft.Application):
     """
 
     :param app:
     :return:
     """
 
+    # with temporary_variation(app):
+    study_selections = ss.get_study_selections(app)
+    if "Find PowerFactory Project" in study_selections:
+        find_sub.get_project(app)
+        return
+
+    prjt = app.GetActiveProject()
+    if prjt is None:
+        app.PrintWarn("No Active Project, Ending Script")
+        return
+
+    if "Find Feeder Open Points" in study_selections:
+        gop.main(app)
+        return
+
     # Undertake model checks
-    all_relays = get_all_relays(app)
+    all_relays = relays.get_all_relays(app)
     model_checks.relay_checks(app, all_relays)
+
+    region = helper.obtain_region(app)
+    feeders_devices, bu_devices, user_selection, external_grid = gi.get_input(app, region, study_selections)
+    feeders = cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices)
 
     # Turn on all grids momentarily to load all floating terminals in to line connected elements
     user_selected_study_case = app.GetActiveStudyCase()
     switch_study_case(app, user_selected_study_case, all_grids=True)
     switch_study_case(app, user_selected_study_case, all_grids=False)
-
-    region = obtain_region(app)
-    # with temporary_variation(app):
-    study_selections = ss.get_study_selections(app, region)
-    feeders_devices, bu_devices, user_selection, external_grid = gi.get_input(app, region, study_selections)
-
-    feeders_devices = model_checks.chk_empty_fdrs(app, feeders_devices)
-    feeders = cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices)
 
     for feeder in feeders:
         gop.get_open_points(app, feeder)
@@ -66,16 +82,16 @@ def main(app):
                 cd.cond_damage(app, feeder.obj.loc_name, selected_devices)
             if 'Protection Relay Coordination Plot' in study_selections:
                 pr.plot_all_relays(app, feeder, selected_devices)
-    if "Legacy Script" in study_selections:
+    if "Fault Level Study (legacy)" in study_selections:
         sb.bridge_results(app, external_grid, feeders)
     else:
         sr.save_dataframe(app, region, study_selections, external_grid, feeders)
 
 
-def switch_study_case(app, user_selected_study_case, all_grids=False):
+def switch_study_case(app: pft.Application, user_selected_study_case: pft.IntCase, all_grids: bool=False):
 
     if user_selected_study_case is None:
-        app.PrintError('Please select a study case.')
+        app.PrintError('Please select a study case and re-run the script.')
         exit(1)
     if all_grids:
         int_case = app.GetProjectFolder("study").GetContents("All Active Grids Study Case")[0]
@@ -84,7 +100,7 @@ def switch_study_case(app, user_selected_study_case, all_grids=False):
     int_case.Activate()
 
 
-def cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices):
+def cvrt_fdr_to_dataclass(app: pft.Application, feeders_devices: Dict, bu_devices: Dict) -> List[dd.Feeder]:
     """
     Convert a dictionary pf protection elements in to a list of feeder dataclasses
     :param app:
@@ -107,21 +123,6 @@ def cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices):
     return feeders
 
 
-def get_all_relays(app):
-    net_mod = app.GetProjectFolder("netmod")
-    # Filter for relays under network model recursively.
-    all_relays = net_mod.GetContents("*.ElmRelay", True)
-    relays = [
-        relay
-        for relay in all_relays
-        if relay.cpGrid
-        if relay.cpGrid.IsCalcRelevant()
-        if relay.GetParent().GetClassName() == "StaCubic"
-        if not relay.IsOutOfService()
-    ]
-    return relays
-
-
 if __name__ == '__main__':
     start = time.time()
 
@@ -133,7 +134,7 @@ if __name__ == '__main__':
     )
     app = pf.GetApplication()
 
-    with app_manager(app, gui=True) as app:
+    with helper.app_manager(app, gui=True) as app:
         main(app)
 
     end = time.time()

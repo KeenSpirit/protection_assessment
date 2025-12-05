@@ -1,13 +1,17 @@
 import math
 import time
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 from devices import fuses as ds
 from oc_plots import get_rmu_fuses as grf
 from pf_protection_helper import create_obj, obtain_region
 import script_classes as dd
+from typing import List, Dict, Union
 from importlib import reload
 
 
-def plot_all_relays(app, feeder, selected_devices):
+def plot_all_relays(app: pft.Application, feeder: dd.Feeder, selected_devices: List[dd.Device]):
     """
 
     :param app:
@@ -50,7 +54,7 @@ def plot_all_relays(app, feeder, selected_devices):
     app.PrintPlain(f"Time overcurrent plots saved in PowerFactory to {directory}")
 
 
-def new_page_format(app):
+def new_page_format(app: pft.Application):
 
     prjt = app.GetActiveProject()
     settings = prjt.GetContents('Settings.SetFold')[0]
@@ -67,7 +71,7 @@ def new_page_format(app):
     return new_format
 
 
-def drawing_format(graphics_board, format_graph):
+def drawing_format(graphics_board: pft.SetDesktop, format_graph: pft.SetFormat):
     """
 
     :param graphics_board:
@@ -81,7 +85,7 @@ def drawing_format(graphics_board, format_graph):
     draw_form.aDrwFrm = format_graph.loc_name     # Format
 
 
-def update_ds_tr_data(app, device_list):
+def update_ds_tr_data(app: pft.Application, device_list: List[dd.Device]):
     """
     Add RMU fuse data to SEQ device max ds trs
     :param app:
@@ -115,7 +119,7 @@ def update_ds_tr_data(app, device_list):
                 max_ds_tr.impedance = string_result['impedance']
 
 
-def create_colour_dic(devices):
+def create_colour_dic(devices: List[dd.Device]):
     """
     Ensure that each device has a uniquely coloured trip curve when OC plots are created
     :param devices:
@@ -138,14 +142,14 @@ def create_colour_dic(devices):
     return colour_dic
 
 
-def create_plot(app, graphics_board, colour_dic, devices: list, sys_volts: str, f_type: str):
+def create_plot(app: pft.Application, graphics_board: pft.SetDesktop, colour_dic, devices: List[dd.Device], sys_volts: str, f_type: str):
     """
 
     :param app:
     :param graphics_board:
     :param colour_dic:
     :param devices: list of protection devices with a common parent terminal
-    :param feeder:
+    :param sys_volts:
     :param f_type:
     :return:
     """
@@ -196,7 +200,6 @@ def create_plot(app, graphics_board, colour_dic, devices: list, sys_volts: str, 
             app.PrintPlain(
                 f'Could not find fuse element for {tr_name} in PowerFactory'
             )
-
     else:
         ds_fuse = []
     # Add all the devices to the plot
@@ -216,14 +219,14 @@ def create_plot(app, graphics_board, colour_dic, devices: list, sys_volts: str, 
     return vipage
 
 
-def create_draw_format(vipage):
+def create_draw_format(vipage: pft.SetVipage):
 
     draw_format = create_obj(vipage, "Drawing Format", "SetGrfpage")
     draw_format.iDrwFrm = 1
     draw_format.aDrwFrm = 'A4'
 
 
-def plot_settings(plot, relay, f_type):
+def plot_settings(plot: pft.VisOcplot, relay: pft.ElmRelay, f_type: str):
     """
     Apply plot parameters
     :param plot:
@@ -232,7 +235,7 @@ def plot_settings(plot, relay, f_type):
     :return:
     """
 
-    def _get_bound(num, bound):
+    def _get_bound(num: float, bound: str):
         order_of_mag = 10 ** int(math.log10(num))
         if bound == 'Min':
             val = math.floor(num / order_of_mag) * order_of_mag
@@ -261,7 +264,7 @@ def plot_settings(plot, relay, f_type):
     plot.y_fit = 0                      # Adapt scale
 
 
-def setocplt(plot, f_type):
+def setocplt(plot: pft.VisOcplot, f_type: str):
     """
     Create plot settings
     :param plot:
@@ -285,8 +288,7 @@ def setocplt(plot, f_type):
     settings.imarg = 1                  # Show Grading Marings while Drag & Drop - Yes
 
 
-
-def xvalue_settings(constant, name, value):
+def xvalue_settings(constant: pft.VisXvalue, name: str, value: float):
     """
     Fault current settings
     :param constant:
@@ -306,15 +308,14 @@ def xvalue_settings(constant, name, value):
     constant.width = 5
     constant.xis = 0                    # Current
 
-def create_plot_folder(feeder, graphics_board):
+def create_plot_folder(feeder: dd.Feeder, graphics_board: pft.SetDesktop):
 
-    # prjt = app.GetActiveProject()
     date_string = time.strftime("%Y%m%d-%H%M%S")
     title = f'{date_string} {feeder.obj.loc_name} Prot Coord Plots'
 
     return graphics_board.CreateObject("IntFolder", title)
 
-def create_folder(app):
+def create_folder(app: pft.Application):
 
     title = 'Protection Coordination Studies'
 

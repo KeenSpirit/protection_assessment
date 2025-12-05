@@ -1,11 +1,31 @@
 import math
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
+from typing import Union, Dict, List, Tuple
 from fault_study import fault_impedance
 import script_classes as dd
 
-def get_active_elements(elements: dict, fault_type: str):
+
+def get_all_relays(app: pft.Application) -> List[pft.ElmRelay]:
+    net_mod = app.GetProjectFolder("netmod")
+    # Filter for relays under network model recursively.
+    all_relays = net_mod.GetContents("*.ElmRelay", True)
+    relays = [
+        relay
+        for relay in all_relays
+        if relay.cpGrid
+        if relay.cpGrid.IsCalcRelevant()
+        if relay.GetParent().GetClassName() == "StaCubic"
+        if not relay.IsOutOfService()
+    ]
+    return relays
+
+
+def get_active_elements(elements: Dict[str, Union[pft.RelToc, pft.RelIoc]], fault_type: str) -> Union[Tuple, List]:
     """
     From a dictionary of protection elements get those elements that are capable of detecting the fault type
-    fault_type str: 'Phase-Ground', '2-Phase', '3-Phase'
+    fault_type: str 'Phase-Ground', '2-Phase', '3-Phase'
     """
 
     if fault_type == '2-Phase':
@@ -22,7 +42,7 @@ def get_active_elements(elements: dict, fault_type: str):
     return active_elements
 
 
-def get_prot_elements(device_pf):
+def get_prot_elements(device_pf: pft.ElmRelay) -> Dict[str, List[Union[pft.RelToc, pft.RelIoc]]]:
     """ Get all of the time overcurrent and instantneous overcurrent
     protection elements that are active and return useful attributes
     """
@@ -76,34 +96,34 @@ def get_prot_elements(device_pf):
     return elements
 
 
-def get_measured_current(element, fault_level, fault_type):
+def get_measured_current(element: pft.ElmRelay, fault_level: float, fault_type: str) -> float:
     """ For a given element, look at the meaurement type according to the
     elements type. Then for the element get the appropriate current that
     the relay is using to make a decision.
     """
-    MeasurementType = element.typ_id.atype
+    measure_type = element.typ_id.atype
 
-    if MeasurementType in ['3ph', 'd3m']:  # 3 phase current
+    if measure_type in ['3ph', 'd3m']:  # 3-Phase current
         return fault_level
-    elif MeasurementType in ['3I0', 'S3I0']:  # Earth current & sensitive earth current
+    elif measure_type in ['3I0', 'S3I0']:  # Earth current & sensitive earth current
         return convert_to_i0(fault_level, threei0=False)
-    elif MeasurementType in ['I0', '1ph']:  # Zero seq current & 1 phase current
+    elif measure_type in ['I0', '1ph']:  # Zero seq current & 1 phase current
         return fault_level
-    elif MeasurementType in ['d1m']:  # 1 phase current
+    elif measure_type in ['d1m']:  # 1 phase current
         return fault_level
-    elif MeasurementType in ['I2']:  # Neg seq. current
+    elif measure_type in ['I2']:  # Neg seq. current
         return convert_to_i2(fault_level, fault_type, threei2=False)
-    elif MeasurementType in ['3I2']:  # 3 x neg seq current
+    elif measure_type in ['3I2']:  # 3 x neg seq current
         return convert_to_i2(fault_level, fault_type, threei2=True)
     else:
-        # If an unhandled measurement type ie encountered return the 3 phase current
+        # If an unhandled measurement type ie encountered return the 3-Phase current
         return fault_level
 
 
-def convert_to_i2(fault_current, fault_type: str, threei2=False):
+def convert_to_i2(fault_current: float, fault_type: str, threei2: bool=False) -> float:
     """
-    Convert 2 phase fault or earth fault phase current to negative sequence current.
-    This function assumes 2 phase fault angles tend towards 180 degrees apart.
+    Convert 2-Phase fault or earth fault phase current to negative sequence current.
+    This function assumes 2-Phase fault angles tend towards 180 degrees apart.
     fault_type str: '3-phase', '2-Phase','Phase-Ground'.
     """
 
@@ -140,7 +160,7 @@ def convert_to_i2(fault_current, fault_type: str, threei2=False):
     return result
 
 
-def convert_to_i0(fault_current, threei0=False):
+def convert_to_i0(fault_current: float, threei0: bool=False) -> float:
     """
     """
     if threei0:
@@ -149,61 +169,61 @@ def convert_to_i0(fault_current, threei0=False):
         return fault_current
 
 
-def get_device_trips(device):
+def get_device_trips(device: Union[pft.ElmRelay, pft.RelFuse]) -> int:
     """Get number of trips for each device."""
 
     if device.GetClassName() == dd.ElementType.RELAY.value:
-        ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
-        if len(ElmRecls) == 0 or ElmRecls[0].outserv or ElmRecls[0].reclnotactive:
+        elmrecls = device.GetChildren(0, '*.RelRecl', 1)
+        if len(elmrecls) == 0 or elmrecls[0].outserv or elmrecls[0].reclnotactive:
             trips = 1
-        elif len(ElmRecls) == 1:
-            trips = ElmRecls[0].GetAttribute("oplockout")
+        elif len(elmrecls) == 1:
+            trips = elmrecls[0].GetAttribute("oplockout")
     else:
         trips = 1  # device  is a fuse
     return trips
 
 
-def reset_reclosing(ElmRelay):
+def reset_reclosing(elmrelay: pft.ElmRelay):
 
-    if ElmRelay.GetClassName() == dd.ElementType.RELAY.value:
-        ElmRecls = ElmRelay.GetChildren(0, '*.RelRecl', 1)
-        for ElmRecl in ElmRecls:
-            ElmRecl.starttimeframe = 1
+    if elmrelay.GetClassName() == dd.ElementType.RELAY.value:
+        elmrecls = elmrelay.GetChildren(0, '*.RelRecl', 1)
+        for elmRecl in elmrecls:
+            elmRecl.starttimeframe = 1
 
 
-def trip_count(device, increment=True):
+def trip_count(device: Union[pft.ElmRelay, pft.RelFuse], increment: bool=True) -> int:
     """Return either the current relay trip number or an increment thereof"""
 
-    ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
+    elmrecls = device.GetChildren(0, '*.RelRecl', 1)
 
-    if len(ElmRecls) == 0 or ElmRecls[0].outserv or ElmRecls[0].reclnotactive:
+    if len(elmrecls) == 0 or elmrecls[0].outserv or elmrecls[0].reclnotactive:
         if increment:
             trip = 2
         else:
             trip = 1        # device is probably a fuse
     else:
-        assert len(ElmRecls) == 1, f'{device.obj} Multiple reclose elements found'
-        ElmRecl = ElmRecls[0]
+        assert len(elmrecls) == 1, f'{device.obj} Multiple reclose elements found'
+        elmrecl = elmrecls[0]
         if increment:
-            ElmRecl.starttimeframe += 1
-        trip = ElmRecl.starttimeframe
+            elmrecl.starttimeframe += 1
+        trip = elmrecl.starttimeframe
     return trip
 
 
-def set_enabled_elements(app, device):
+def set_enabled_elements(device: Union[pft.ElmRelay, pft.RelFuse]) -> Dict:
     """For a given device, set out of service the elements disabled for the current auto-reclose iteration"""
 
     if device.GetClassName() != dd.ElementType.RELAY.value:
         return False
-    ElmRecls = device.GetChildren(0, '*.RelRecl', 1)
-    if len(ElmRecls) == 0:
+    elmrecls = device.GetChildren(0, '*.RelRecl', 1)
+    if len(elmrecls) == 0:
         block_service_status = None
         return block_service_status
-    assert len(ElmRecls) == 1, 'Multiple reclose elements found'
-    ElmRecl = ElmRecls[0]
+    assert len(elmrecls) == 1, 'Multiple reclose elements found'
+    elmrecl = elmrecls[0]
 
-    logic = ElmRecl.GetAttribute("ilogic")
-    recloser_type = ElmRecl.GetAttribute("typ_id")
+    logic = elmrecl.GetAttribute("ilogic")
+    recloser_type = elmrecl.GetAttribute("typ_id")
     type_block_id = recloser_type.GetAttribute("blockid")
     if type_block_id is None:
         return None
@@ -215,7 +235,7 @@ def set_enabled_elements(app, device):
             if element is not None and block in element.loc_name:
                 reclose_blocks[element] = block_logic
 
-    trip_number = ElmRecl.starttimeframe
+    trip_number = elmrecl.starttimeframe
     if trip_number <= 1:
         list_index = 0
     else:
@@ -232,14 +252,14 @@ def set_enabled_elements(app, device):
     return block_service_status
 
 
-def reset_block_service_status(block_service_status):
+def reset_block_service_status(block_service_status: Dict):
     if block_service_status:
         for block in block_service_status:
             block.SetAttribute('outserv', block_service_status[block])
     return
 
 
-def device_reach_factors(region, device):
+def device_reach_factors(region: str, device: Union[pft.ElmRelay, pft.RelFuse]) -> Dict:
     """
 
     :param device:
@@ -287,7 +307,7 @@ def device_reach_factors(region, device):
                 # There is no SWER, the device sees earth fault
                 nps_ef_rf.append(round(device_fl / 3 / nps_pickup, 2))
             else:
-                # There is SWER, the device sees 2 phase fault current
+                # There is SWER, the device sees 2-Phase fault current
                 nps_ef_rf.append(round(device_fl / math.sqrt(3) / nps_pickup, 2))
         nps_ph_rf = [round(term.min_fl_2ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
     else:
@@ -348,7 +368,7 @@ def device_reach_factors(region, device):
                     # There is no SWER, the device sees earth fault
                     bu_nps_ef_rf.append(round(bu_device_fl / 3 / bu_nps_pickup, 2))
                 else:
-                    # There is SWER, the device sees 2 phase fault current
+                    # There is SWER, the device sees 2-Phase fault current
                     bu_nps_ef_rf.append(round(bu_device_fl / math.sqrt(3) / bu_nps_pickup, 2))
             bu_nps_ph_rf = [round(term.min_fl_2ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]
         else:
@@ -384,7 +404,7 @@ def device_reach_factors(region, device):
     return device_reach_factors
 
 
-def determine_pickup_values(device_pf):
+def determine_pickup_values(device_pf: Union[pft.ElmRelay, pft.RelFuse]) -> List[float]:
     """The values returned from this function will be used to calculate the
     reach factor."""
     # If the devices is a fuse then it will have a known size. A fuse factor
@@ -438,13 +458,14 @@ def determine_pickup_values(device_pf):
     return setting_values
 
 
-def swer_transform(device, term, term_fl_pg):
+def swer_transform(device: dd.Device, term: dd.Termination, term_fl_pg: float) -> float:
     """
     The fault level seen by the device depends on any voltage and phase transformations that occur between the device
     and the fault.
     Currently, this function handles single phase SWER only.
     :param device:
     :param term:
+    :param term_fl_pg:
     :return:
     """
 

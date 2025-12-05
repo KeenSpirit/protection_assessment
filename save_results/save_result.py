@@ -1,10 +1,11 @@
 from pathlib import Path
+import os
+import time
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import sys
-
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
 import powerfactorytyping as pft
 from cond_damage import apply_results as ar
@@ -24,8 +25,6 @@ def save_dataframe(app, region, study_selections, external_grid, feeders):
     be saved local users PowerFactoryResults folder
     """
 
-    import os
-    import time
     project = app.GetActiveProject()
     derived_proj = project.der_baseproject
     try:

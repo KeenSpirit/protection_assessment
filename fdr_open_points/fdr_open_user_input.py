@@ -2,9 +2,12 @@ import powerfactory as pf
 import sys
 import tkinter as tk
 from tkinter import ttk
+from typing import List, Dict
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 
 
-def mesh_feeder_check(app):
+def mesh_feeder_check(app: pft.Application):
     """Checks if any of the substation feeders are meshes and excludes them from the feeder select list. If no radial
     feeders are found, a message is displayed to the user """
 
@@ -33,13 +36,14 @@ def mesh_feeder_check(app):
         ttk.Label(root, text="No radial feeders were found at the substation").grid(padx=5, pady=5)
         ttk.Label(root, text="To run this script, please radialise one or more feeders").grid(padx=5, pady=5)
 
-        ttk.Button(root, text='Exit', command=lambda: exit_script(root)).grid(sticky="s", padx=5, pady=5)
+        ttk.Button(root, text='Exit', command=lambda: exit_script(root, app)).grid(sticky="s", padx=5, pady=5)
 
         # Run the interface
         root.mainloop()
 
+    return radial_dic
 
-def get_feeders(app, radial_dic):
+def get_feeders(app: pft.Application, radial_dic: Dict):
     """From the user, gather a feeder list for study. Also prompt the user to set external grid parameters"""
 
     radial_list = list(radial_dic.values())
@@ -48,9 +52,9 @@ def get_feeders(app, radial_dic):
     # Setup the root window
     root = tk.Tk()
 
-    def _window_dim(radial_list):
+    def _window_dim(radial_list: List[str]):
         horiz_offset = 400
-        feeder_col = 285
+        feeder_col = 350
         window_width = feeder_col
         if window_width > 1300:
             horiz_offset = 200
@@ -125,12 +129,12 @@ def populate_feeders(app, root, frame, radial_list):
 
     ttk.Button(frame, text='Okay', command=lambda: root.destroy()).grid(row=row_index, column=0, sticky="w", padx=5,
                                                                         pady=5)
-    ttk.Button(frame, text='Exit', command=lambda: exit_script(root)).grid(row=row_index, column=1, sticky="w",
+    ttk.Button(frame, text='Exit', command=lambda: exit_script(root, app)).grid(row=row_index, column=1, sticky="w",
                                                                            padx=5, pady=5)
     return list_length, var
 
 
-def window_error(app, radial_dic, a):
+def window_error(app: pft.Application, radial_dic: Dict, a: int):
     """Check user inputs are formatted correctly"""
 
     if a == 1:
@@ -144,10 +148,9 @@ def window_error(app, radial_dic, a):
     return feeder_list
 
 
-def exit_script(root):
+def exit_script(root, app):
     """Exits script"""
 
-    app = pf.GetApplication()
     app.PrintPlain("User terminated script.")
     root.destroy()
     sys.exit(0)

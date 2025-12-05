@@ -6,6 +6,9 @@ supported in here are:
 
 import uuid
 from contextlib import contextmanager
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 
 __all__ = ['app_manager'
     , 'project_manager'
@@ -15,7 +18,7 @@ __all__ = ['app_manager'
 
 
 @contextmanager
-def app_manager(app, clear=True, gui=False, echo=False, cache=False):
+def app_manager(app, clear=True, gui=False, echo_on=False, cache=False):
     """ Allows the powerfactor application class to be called using a with
     with statement.
 
@@ -25,7 +28,7 @@ def app_manager(app, clear=True, gui=False, echo=False, cache=False):
     try:
         app.ResetCalculation()
         if clear: app.ClearOutputWindow()
-        if echo:
+        if echo_on:
             app.EchoOn()
         else:
             echo = app.GetFromStudyCase('ComEcho')

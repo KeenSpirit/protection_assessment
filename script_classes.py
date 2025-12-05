@@ -8,10 +8,12 @@ There are four dataclass types used by the script:
 This module is used for defining and initiliasing each dataclass
 It also defines various element types used by the script
 """
-
 from enum import Enum
 from dataclasses import dataclass
-from devices import fuses as ds
+import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
+from typing import List, Dict, Union, Any, Optional
 from typing import Optional, Dict
 
 
@@ -28,22 +30,60 @@ class ElementType(Enum):
     FEEDER = 'ElmFeeder'
 
 
+class ConstructionType(Enum):
+    """Line construction types affecting fault impedance."""
+    OVERHEAD = "OH"
+    UNDERGROUND = "UG"
+    SWER = "SWER"
+
+
+class FaultType(Enum):
+    """Types of faults for analysis."""
+    THREE_PHASE = "3-Phase"
+    TWO_PHASE = "2-Phase"
+    PHASE_GROUND = "Phase-Ground"
+
+
+@dataclass(frozen=True)
+class FaultCurrents:
+    """
+    Immutable container for fault current values at a location.
+
+    Once created, values cannot be modified, preventing accidental corruption.
+    All values in Amperes (primary).
+
+    Usage:
+        fc = FaultCurrents(three_phase=1500, two_phase=1300, phase_ground=800)
+        print(fc.three_phase)  # 1500
+        print(fc.max_phase)    # 1500
+        fc.three_phase = 999   # ERROR! Cannot modify frozen dataclass
+    """
+    three_phase: float
+    two_phase: float
+    phase_ground: float
+
+    @property
+    def max_phase(self) -> float:
+        """Maximum of 3-phase and 2-phase fault currents."""
+        return max(self.three_phase, self.two_phase)
+
+
 @dataclass
 class Feeder:
-    obj: object
-    cubicle: object
-    term: object
+    obj: pft.ElmFeeder
+    cubicle: pft.StaCubic
+    term: pft.ElmTerm
     sys_volts: float
     devices: list
-    bu_devices: list
+    bu_devices: Dict
     open_points: Dict
 
 
 @dataclass
 class Device:
-    obj: object
-    cubicle: object
-    term: object
+    obj: Any
+    cubicle: pft.StaCubic
+    term: pft.ElmTerm
     phases: int
     l_l_volts: float
     ds_capacity: Optional[float]
@@ -65,7 +105,7 @@ class Device:
 
 @dataclass
 class Termination:
-    obj: object
+    obj: pft.ElmTerm
     constr: Optional[str]
     phases: int
     l_l_volts: float
@@ -81,11 +121,12 @@ class Termination:
     min_sn_fl_pg: float
     min_sn_fl_pg10: float
     min_sn_fl_pg50: float
-
+    max_faults: Optional[FaultCurrents] = None
+    min_faults: Optional[FaultCurrents] = None
 
 @dataclass
 class Line:
-    obj: object
+    obj: pft.ElmLne
     phases: int
     l_l_volts: float
     max_fl_3ph: float
@@ -108,8 +149,8 @@ class Line:
 
 @dataclass
 class Tfmr:
-    obj: object
-    term: object
+    obj: Union[pft.ElmLod, pft.ElmTr2]
+    term: pft.ElmTerm
     load_kva: Optional[float]
     max_ph: Optional[str]
     max_pg: Optional[str]
@@ -118,7 +159,7 @@ class Tfmr:
     impedance: Optional[str]
 
 
-def initialise_fdr_dataclass(element):
+def initialise_fdr_dataclass(element: Any) -> Feeder:
 
     dataclass = Feeder(
             element,
@@ -127,12 +168,12 @@ def initialise_fdr_dataclass(element):
             element.cn_bus.uknom,
             [],
             [],
-            []
+            {}
             )
     return dataclass
 
 
-def initialise_dev_dataclass(element):
+def initialise_dev_dataclass(element: Any) -> Device:
 
     if element is None:
         return None
@@ -147,7 +188,7 @@ def initialise_dev_dataclass(element):
             element,
             cubicle,
             cubicle.cterm,
-            ds.ph_attr_lookup(cubicle.cterm.phtech),
+            ph_attr_lookup(cubicle.cterm.phtech),
             round(cubicle.cterm.uknom, 2),
             None,
             None,
@@ -168,14 +209,14 @@ def initialise_dev_dataclass(element):
     return dataclass
 
 
-def initialise_term_dataclass(elmterm):
+def initialise_term_dataclass(elmterm: pft.ElmTerm) -> Union[None, Termination]:
 
     if elmterm is None:
         return None
     dataclass = Termination(
             elmterm,
             None,
-            ds.ph_attr_lookup(elmterm.phtech),
+            ph_attr_lookup(elmterm.phtech),
             round(elmterm.uknom,2),
             None,
             None,
@@ -193,7 +234,7 @@ def initialise_term_dataclass(elmterm):
     return dataclass
 
 
-def initialise_line_dataclass(elmlne):
+def initialise_line_dataclass(elmlne: pft.ElmLne) -> Union[None, Line]:
 
     if elmlne is None:
         return None
@@ -216,7 +257,7 @@ def initialise_line_dataclass(elmlne):
 
         return int(num_phases)
 
-    def _get_voltage(elmlne):
+    def _get_voltage(elmlne: pft.ElmLne) -> float:
         """
         Get the line-line operating voltage of the given ElmLne element.
         :param line:
@@ -233,7 +274,7 @@ def initialise_line_dataclass(elmlne):
                 pass
         return l_l_volts
 
-    def _get_conductor(elmlne):
+    def _get_conductor(elmlne: pft.ElmLne) -> str:
         """Looks at the tower geometry or the cable system to return the conductor type and thermal rating
         """
         construction = elmlne.typ_id.GetClassName()
@@ -283,10 +324,59 @@ def initialise_line_dataclass(elmlne):
     return dataclass
 
 
-def initialise_load_dataclass(load):
+def initialise_load_dataclass(load: Union[None, pft.ElmLod, pft.ElmTr2]) -> Union[None, Tfmr]:
     if load is None:
         return Tfmr(None, None, None, None, None, None, None, None)
     if load.GetClassName() == ElementType.LOAD.value:
         return Tfmr(load, load.bus1.cterm, round(load.Strat), None, None, None, None, None)
     if load.GetClassName() == ElementType.TFMR.value:
         return Tfmr(load, load.bushv.cterm, round(load.Snom_a * 1000), None, None, None, None, None)
+
+
+def ph_attr_lookup(attr: int):
+    """
+    Convert the terminal phase technology attribute phtech to a meaningful value
+    :param attr:
+    :return:
+    """
+    phases = {1:[6, 7, 8], 2:[2, 3, 4, 5], 3:[0, 1]}
+    for phase, attr_list in phases.items():
+        if attr in attr_list:
+            return phase
+
+
+def populate_fault_currents(terminal: 'Termination') -> None:
+    """
+    Create immutable FaultCurrents objects from a terminal's existing fault values.
+
+    Call this AFTER all fault studies have populated the individual fields.
+    This groups the fault values into immutable objects for safer access.
+
+    Args:
+        terminal: A Termination dataclass with fault values already populated
+
+    Example:
+        # After your fault studies complete:
+        for device in devices:
+            for terminal in device.sect_terms:
+                populate_fault_currents(terminal)
+
+        # Now you can access fault currents either way:
+        old_way = terminal.max_fl_3ph           # Still works
+        new_way = terminal.max_faults.three_phase  # Also works, immutable
+    """
+    # Create max faults object (or None if values are missing)
+    if terminal.max_fl_3ph is not None:
+        terminal.max_faults = FaultCurrents(
+            three_phase=terminal.max_fl_3ph or 0,
+            two_phase=terminal.max_fl_2ph or 0,
+            phase_ground=terminal.max_fl_pg or 0
+        )
+
+    # Create min faults object (or None if values are missing)
+    if terminal.min_fl_3ph is not None:
+        terminal.min_faults = FaultCurrents(
+            three_phase=terminal.min_fl_3ph or 0,
+            two_phase=terminal.min_fl_2ph or 0,
+            phase_ground=terminal.min_fl_pg or 0
+        )

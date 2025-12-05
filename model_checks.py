@@ -1,28 +1,10 @@
 import sys
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
+from typing import List, Dict, Union
 
 
-def chk_empty_fdrs(app, feeders_devices):
-    """
-    Check that the selected feeders have protection devices created.
-    :param app:
-    :param feeders_devices:
-    :return:
-    """
-
-    empty_feeders = [feeder for feeder, devices in feeders_devices.items() if devices == []]
-
-    if len(empty_feeders) == len(feeders_devices):
-        app.PrintError("No protection devices were detected in the model for the selected feeders. \n"
-                       "Please add and configure the required protection devices and re-run the script.")
-        sys.exit(0)
-    for empty_feeder in empty_feeders:
-            app.PrintWarn(f"No protection devices were detected in the model for feeder {empty_feeder}. \n"
-                          "This feeder will be excluded from the study.")
-            del feeders_devices[empty_feeder]
-    return feeders_devices
-
-
-def relay_checks(app, relays) -> dict:
+def relay_checks(app: pft.Application, relays: List):
     """ Relays must be configured with the correct information"""
 
     relay_issues_detected = {}
@@ -36,7 +18,7 @@ def relay_checks(app, relays) -> dict:
         app.PrintWarn(f"Warnings: {relay_issues_detected}")
 
 
-def relay_type_check(elmrelay, relay_issues_detected):
+def relay_type_check(elmrelay: pft.ElmRelay, relay_issues_detected: Dict):
     """
     The relay must have relay type assigned
     :param elmrelay:
@@ -51,7 +33,7 @@ def relay_type_check(elmrelay, relay_issues_detected):
     return relay_issues_detected
 
 
-def ct_phase_check(elmrelay, relay_issues_detected) -> dict:
+def ct_phase_check(elmrelay: pft.ElmRelay, relay_issues_detected: Dict) -> Dict:
     """
     Each relay must have a CT wired to it, and the relay measured phase count must equal the CT phase count.
     """

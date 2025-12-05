@@ -1,25 +1,8 @@
 from tkinter import *  # noqa [F403]
-from tkinter import ttk
 import sys
-from typing import Dict, List, Tuple, Any
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 import script_classes as dd
-
-def loc_name(device):
-
-    if device.HasAttribute("r:cpSubstat:e:loc_name"):
-        sub_code = device.GetAttribute("r:cpSubstat:e:loc_name")
-        if (
-                sub_code == device.loc_name[: len(sub_code)]
-                or device.loc_name[:2] == "RC"
-        ):
-            key = device.loc_name
-        else:
-            key = f"{sub_code}_{device.loc_name}"
-    else:
-        key = device.loc_name
-    return key
-
-
 import tkinter as tk
 from tkinter import ttk
 import sys
@@ -30,16 +13,23 @@ class FaultLevelStudy:
     def __init__(self, app):
         self.app = app
 
-    def main(self, region: str, study_selections: int) -> Tuple[Dict, Dict, Dict, Dict]:
+    def main(self, region: str, study_selections: List) -> Tuple[Dict, Dict, Dict, Dict]:
+
         radial_list, lines_oos = self.mesh_feeder_check()
         feeder_list, external_grid = self.feeders_external_grid(radial_list, lines_oos)
-        if 'All Relays Configured' in study_selections:
-            feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
-            user_selection = self.run_window(feeder_list, feeders_devices, region)
-        else:
+        if 'Fault Level Study (legacy)' in study_selections:
             feeders_devices, bu_devices = self.get_feeder_switches(feeder_list, region)
-            user_selection = self.run_window(feeder_list, feeders_devices, region)
+            self.chk_empty_fdrs(feeders_devices)
+            user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=False)
             feeders_devices = user_selection
+        elif "Fault Level Study (no relays configured in model)" in study_selections:
+            feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
+            self.chk_empty_fdrs(feeders_devices)
+            user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=False)
+        else:
+            feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
+            self.chk_empty_fdrs(feeders_devices)
+            user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=True)
         return feeders_devices, bu_devices, user_selection, external_grid
 
     def center_window(self, root, width, height):
@@ -50,15 +40,15 @@ class FaultLevelStudy:
         y = (screen_height - height) // 2
         root.geometry(f"{width}x{height}+{x}+{y}")
 
-    def mesh_feeder_check(self) -> List[str]:
+    def mesh_feeder_check(self) -> Tuple[List[str], bool]:
         self.app.PrintPlain("Checking for radial feeders...")
         grids = self.app.GetCalcRelevantObjects('*.ElmXnet')
         all_feeders = self.app.GetCalcRelevantObjects('*.ElmFeeder')
 
-        lines_oos = FALSE
+        lines_oos = False
         for feeder in all_feeders:
             if self.get_lines_oos(feeder):
-                lines_oos = TRUE
+                lines_oos = True
                 self.app.PrintWarn("WARNING: The following feeders have lines out of service. \n"
                                    "These feeders will not appear in the selections list if the lines serve as open points. \n"
                                    "To remedy this, return the lines to service and place an open switch at one end of each line.")
@@ -407,34 +397,13 @@ class FaultLevelStudy:
     def get_feeders_devices(self, radial_list: List[str]) -> Tuple[Dict[str,list],Dict[Any,list]]:
         """Get active relays and fuses.
         Map them to corresponding external grid or feeder using a dictionary"""
-        from devices import fuses
+        from devices import fuses, relays
 
-        # Relays belong in the network model project folder.
-        net_mod = self.app.GetProjectFolder("netmod")
         # Filter for relays under network model recursively.
-        all_relays = net_mod.GetContents("*.ElmRelay", True)
-        relays = [
-            relay
-            for relay in all_relays
-            if relay.cpGrid
-            if relay.cpGrid.IsCalcRelevant()
-            if relay.GetParent().GetClassName() == "StaCubic"
-            if relay.fold_id.cterm.IsEnergized()
-            if not relay.IsOutOfService()
-        ]
+        all_relays = relays.get_all_relays(self.app)
         # Create a list of active fuses
-        all_fuses = net_mod.GetContents("*.RelFuse", True)
-        fuses = [
-            fuse
-            for fuse in all_fuses
-            if fuse.cpGrid
-            if fuse.cpGrid.IsCalcRelevant()
-            if fuse.fold_id.HasAttribute("cterm")
-            if fuse.fold_id.cterm.IsEnergized()
-            if not fuse.IsOutOfService()
-            if fuses.determine_fuse_type(fuse)
-        ]
-        devices = relays + fuses
+        all_fuses = fuses.get_all_fuses(self.app)
+        devices = all_relays + all_fuses
 
         feeder_device_dict = {feeder: [] for feeder in radial_list}
         grid_device_dict = {grid: [] for grid in self.app.GetCalcRelevantObjects('*.ElmXnet') if grid.bus1 is not None}
@@ -496,7 +465,27 @@ class FaultLevelStudy:
         return feeders_switches, bu_devices
 
 
-    def populate(self, frame, feeder_list, feeders_switches, region, button_frame):
+    def chk_empty_fdrs(self, fdrs_devices):
+        """
+        Check that the selected feeders have protection devices created.
+        :param self:
+        :param fdrs_devices:
+        :return:
+        """
+
+        empty_feeders = [feeder for feeder, devices in fdrs_devices.items() if devices == []]
+
+        if len(empty_feeders) == len(fdrs_devices):
+            self.app.PrintError("No protection devices were detected in the model for the selected feeders. \n"
+                           "Please add and configure the required protection devices and re-run the script.")
+            sys.exit(0)
+        for empty_feeder in empty_feeders:
+            self.app.PrintWarn(f"No protection devices were detected in the model for feeder {empty_feeder}. \n"
+                          "This feeder will be excluded from the study.")
+            del fdrs_devices[empty_feeder]
+
+
+    def populate(self, frame, feeder_list, feeders_switches, region, button_frame, relays_configured):
         if region == 'Regional Models':
             fdr_sw_locname = {feeder: [switch.loc_name for switch in switches]
                               for feeder, switches in feeders_switches.items()}
@@ -511,8 +500,12 @@ class FaultLevelStudy:
                     switch_term = cubicle.cterm.loc_name
                     fdr_sw_locname[feeder].append(switch_term[:-5] if switch_term.endswith("_Term") else switch_term)
 
-        ttk.Label(frame, text="Select all protection devices to study:",
-                  font='Helvetica 12 bold').grid(columnspan=8, padx=5, pady=5)
+        if relays_configured:
+            ttk.Label(frame, text="Select all protection devices to study:",
+                      font='Helvetica 12 bold').grid(columnspan=8, padx=5, pady=5)
+        else:
+            ttk.Label(frame, text="Select ALL protection devices:",
+                      font='Helvetica 12 bold').grid(columnspan=8, padx=5, pady=5)
 
         for idx, fid in enumerate(feeder_list):
             ttk.Label(frame, text=fid).grid(row=1, column=idx, sticky='W', padx=10, pady=5)
@@ -545,7 +538,7 @@ class FaultLevelStudy:
                                                                                                           padx=5)
         return var, fdr_sw_locname
 
-    def run_window(self, feeder_list: List[str], feeders_devices: Dict[str, List[Any]], region: str) -> Dict[
+    def run_window(self, feeder_list: List[str], feeders_devices: Dict[str, List[Any]], region: str, relays_configured: bool) -> Dict[
         str, List[Any]]:
 
         def _window_dim(feeder_list, feeders_switches, region):
@@ -581,7 +574,7 @@ class FaultLevelStudy:
         button_frame = tk.Frame(root)
         button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
-        var, fdr_dev_locname = self.populate(frame, feeder_list, feeders_devices, region, button_frame)
+        var, fdr_dev_locname = self.populate(frame, feeder_list, feeders_devices, region, button_frame, relays_configured)
 
         canvas.pack(expand=True, fill=tk.BOTH)
 
@@ -643,6 +636,6 @@ class FaultLevelStudy:
         canvas.pack(fill="both", expand=True)
 
 
-def get_input(app, region, study_selections):
+def get_input(app: pft.Application, region: str, study_selections: List):
     study = FaultLevelStudy(app)
     return study.main(region, study_selections)

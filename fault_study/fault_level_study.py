@@ -12,10 +12,10 @@ Main workflow:
 
 import sys
 
-from typing import List
+from typing import List, Dict, Union
 sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
 import powerfactorytyping as pft
-import pf_protection_helper as pph
+import pf_protection_helper as helper
 from fault_study import analysis, fault_impedance, floating_terminals as ft
 import script_classes as dd
 from importlib import reload
@@ -26,12 +26,13 @@ reload(dd)
 reload(fault_impedance)
 
 
-def fault_study(app, external_grid, region, feeder):
+def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: dd.Feeder):
     """
 
     :param app:
+    :param external_grid:
+    :param region:
     :param feeder:
-    :param sites:
     :return:
     """
 
@@ -40,21 +41,22 @@ def fault_study(app, external_grid, region, feeder):
     get_downstream_objects(app, feeder.devices)
     us_ds_device(feeder.devices, feeder.bu_devices)
     get_ds_capacity(feeder.devices)
-    get_device_sections(app, feeder.devices)
+    get_device_sections(feeder.devices)
 
     study_configs = [
-        ('Max', 'Ground'), ('Max', '3 Phase'), ('Max', '2 Phase'),
-        ('Min', 'Ground'), ('Min', '3 Phase'), ('Min', '2 Phase'),
+        ('Max', 'Ground'), ('Max', '3-Phase'), ('Max', '2-Phase'),
+        ('Min', 'Ground'), ('Min', '3-Phase'), ('Min', '2-Phase'),
         ('Min', 'Ground Z10'), ('Min', 'Ground Z50'),
     ]
     sn_study_configs = [
-        ('Min', '2 Phase'), ('Min', 'Ground Z10'), ('Min', 'Ground Z50'),
+        ('Min', '2-Phase'), ('Min', 'Ground'), ('Min', 'Ground Z10'),
+        ('Min', 'Ground Z50'),
     ]
 
     for bound, fault_type in study_configs:
         analysis.short_circuit(app, bound=bound, f_type=fault_type)
         terminal_fls(feeder.devices, bound=bound, f_type=fault_type)
-    if grid_equivalance_check:
+    if grid_equivalance_check(external_grid):
         copy_min_fls(feeder.devices)
     else:
         reset_min_source_imp(external_grid, sys_norm_min=True)
@@ -62,16 +64,24 @@ def fault_study(app, external_grid, region, feeder):
             analysis.short_circuit(app, bound=bound, f_type=fault_type)
             terminal_fls(feeder.devices, bound='SN_Min', f_type=fault_type)
         reset_min_source_imp(external_grid, sys_norm_min=False)
+    # for device in feeder.devices:
+    #     terms = device.sect_terms
+    #     for term in terms:
+    #         app.PrintPlain(f"{term.obj.loc_name} min_fl_pg: {term.min_fl_pg}")
+    #         app.PrintPlain(f"{term.obj.loc_name} min_sn_fl_pg: {term.min_sn_fl_pg}")
 
     fault_impedance.update_node_construction(feeder.devices)
 
-    floating_terms = ft.get_floating_terminals(app, feeder.obj, feeder.devices)
+    floating_terms = ft.get_floating_terminals(feeder.obj, feeder.devices)
     append_floating_terms(app, external_grid, feeder.devices, floating_terms)
-    update_device_data(app, region, feeder.devices)
+    update_device_data(region, feeder.devices)
     update_line_data(app, region, feeder.devices)
+    for device in feeder.devices:
+        for terminal in device.sect_terms:
+            dd.populate_fault_currents(terminal)
 
 
-def get_downstream_objects(app, devices: List[object]) -> None:
+def get_downstream_objects(app: pft.Application, devices: List):
     """
     Populates device objects with their downstream network components.
 
@@ -92,7 +102,7 @@ def get_downstream_objects(app, devices: List[object]) -> None:
     all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
     grids = [grid for grid in all_grids if grid.outserv == 0]
 
-    region = pph.obtain_region(app)
+    region = helper.obtain_region(app)
     for device in devices:
         terminals = [device.term]
         loads = []
@@ -119,10 +129,11 @@ def get_downstream_objects(app, devices: List[object]) -> None:
         device.sect_lines = lines
 
 
-def us_ds_device(devices, bu_devices):
+def us_ds_device(devices: List[dd.Device], bu_devices: Dict):
     """
 
     :param devices:
+    :param bu_devices:
     :return:
     """
 
@@ -145,18 +156,18 @@ def us_ds_device(devices, bu_devices):
                         device.us_devices.extend(grid_devices)
 
 
-def get_ds_capacity(devices):
+def get_ds_capacity(devices: List[dd.Device]):
     """
     Calculate the capacity of all distribution transformers downstream of each device.
     """
-    def _get_load(obj):
+    def _get_load(obj: pft.ElmLod) -> float:
         return obj.Strat if obj.GetClassName() == dd.ElementType.LOAD.value else obj.Snom_a * 1000
 
     for device in devices:
         device.ds_capacity = round(sum([_get_load(obj) for obj in device.sect_loads]))
 
 
-def get_device_sections(app, devices):
+def get_device_sections(devices: List[dd.Device]):
     """
 
     :param devices:
@@ -197,7 +208,7 @@ def get_device_sections(app, devices):
         device.sect_lines = dataclass_lines
 
 
-def terminal_fls(devices, bound, f_type):
+def terminal_fls(devices: List[dd.Device], bound: str, f_type: str):
     """
 
     :param devices:
@@ -212,7 +223,7 @@ def terminal_fls(devices, bound, f_type):
             if bound == 'Max':
                 if f_type == 'Ground':
                     terminal.max_fl_pg = analysis.get_terminal_current(elmterm)
-                elif f_type == '3 Phase':
+                elif f_type == '3-Phase':
                     terminal.max_fl_3ph = analysis.get_terminal_current(elmterm)
                 else:
                     terminal.max_fl_2ph = analysis.get_terminal_current(elmterm)
@@ -223,7 +234,7 @@ def terminal_fls(devices, bound, f_type):
                     terminal.min_fl_pg10 = analysis.get_terminal_current(elmterm)
                 elif f_type == 'Ground Z50':
                     terminal.min_fl_pg50 = analysis.get_terminal_current(elmterm)
-                elif f_type == '3 Phase':
+                elif f_type == '3-Phase':
                     terminal.min_fl_3ph = analysis.get_terminal_current(elmterm)
                 else:
                     terminal.min_fl_2ph = analysis.get_terminal_current(elmterm)
@@ -234,11 +245,11 @@ def terminal_fls(devices, bound, f_type):
                     terminal.min_sn_fl_pg10 = analysis.get_terminal_current(elmterm)
                 elif f_type == 'Ground Z50':
                     terminal.min_sn_fl_pg50 = analysis.get_terminal_current(elmterm)
-                elif f_type == '2 Phase':
+                elif f_type == '2-Phase':
                     terminal.min_sn_fl_2ph = analysis.get_terminal_current(elmterm)
 
 
-def append_floating_terms(app, external_grid, devices, floating_terms):
+def append_floating_terms(app: pft.Application, external_grid: Dict, devices: List[dd.Device], floating_terms: Dict):
     """
 
     :param app:
@@ -256,8 +267,8 @@ def append_floating_terms(app, external_grid, devices, floating_terms):
                 ppro = 99
             termination = dd.initialise_term_dataclass(elmterm)
             study_configs = [
-                ('Max', '3 Phase','max_fl_3ph'), ('Max', '2 Phase', 'max_fl_2ph'), ('Max', 'Ground', 'max_fl_pg'),
-                ('Min', '3 Phase', 'min_fl_3ph'), ('Min', '2 Phase', 'min_fl_2ph'), ('Min', 'Ground', 'min_fl_pg'),
+                ('Max', '3-Phase','max_fl_3ph'), ('Max', '2-Phase', 'max_fl_2ph'), ('Max', 'Ground', 'max_fl_pg'),
+                ('Min', '3-Phase', 'min_fl_3ph'), ('Min', '2-Phase', 'min_fl_2ph'), ('Min', 'Ground', 'min_fl_pg'),
                 ('Min', 'Ground Z10', 'min_fl_pg10'), ('Min', 'Ground Z50', 'min_fl_pg50'),
             ]
             for bound, fault_type, attribute in study_configs:
@@ -272,7 +283,7 @@ def append_floating_terms(app, external_grid, devices, floating_terms):
                 termination.min_sn_fl_2ph = termination.min_fl_2ph
             else:
                 sn_study_configs = [
-                    ('Min', '2 Phase', 'min_sn_fl_2ph'), ('Min', 'Ground', 'min_sn_fl_pg'),
+                    ('Min', '2-Phase', 'min_sn_fl_2ph'), ('Min', 'Ground', 'min_sn_fl_pg'),
                     ('Min', 'Ground Z10', 'min_sn_fl_pg10'), ('Min', 'Ground Z50', 'min_sn_fl_pg50'),
                 ]
                 reset_min_source_imp(external_grid, sys_norm_min=True)
@@ -286,17 +297,17 @@ def append_floating_terms(app, external_grid, devices, floating_terms):
             sect_terms.append(termination)
 
 
-def grid_equivalance_check(new_grid_data):
-    indentical_grids = True
+def grid_equivalance_check(new_grid_data: Dict) -> bool:
+    identical_grids = True
     for grid, attributes in new_grid_data.items():
         for i in range (5, 10):
             if attributes[i] != attributes[i+5]:
-                indentical_grids = False
+                identical_grids = False
                 break
-    return indentical_grids
+    return identical_grids
 
 
-def reset_min_source_imp(new_grid_data, sys_norm_min=False):
+def reset_min_source_imp(new_grid_data: Dict, sys_norm_min: bool=False):
     """"""
 
     for grid, attributes in new_grid_data.items():
@@ -317,7 +328,7 @@ def reset_min_source_imp(new_grid_data, sys_norm_min=False):
             grid.SetAttribute('r0tx0min', attributes[9])
 
 
-def copy_min_fls(devices):
+def copy_min_fls(devices: List[dd.Device]):
     """
 
     :param devices:
@@ -333,20 +344,20 @@ def copy_min_fls(devices):
             terminal.min_sn_fl_2ph = terminal.min_fl_2ph
 
 
-def update_device_data(app, region, devices):
+def update_device_data(region: str, devices: List[dd.Device]):
     """
 
     :param devices:
     :return:
     """
 
-    def _safe_max(sequence):
+    def _safe_max(sequence: List) -> Union[int, float]:
         try:
             return max(sequence)
         except ValueError:
             return 0
 
-    def _safe_min(sequence):
+    def _safe_min(sequence: List) -> Union[int, float]:
         try:
             return min(sequence)
         except ValueError:
@@ -390,7 +401,7 @@ def update_device_data(app, region, devices):
         device.sect_terms = sorted(device.sect_terms, key=lambda term: term.min_fl_pg, reverse=True)
 
 
-def update_line_data(app, region, devices):
+def update_line_data(app: pft.Application, region: str, devices: List[dd.Device]):
     """
     Get max and min fault current seen by the line for faults occurring within the device protection section
     (i.e. not just faults that occur on the line).

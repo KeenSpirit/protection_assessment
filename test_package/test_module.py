@@ -70,7 +70,7 @@ def test_reclosing(app, test_relay_name: str):
     trip_count = 1
     while trip_count <= total_trips:
         app.PrintPlain(f"test trip_count:{trip_count}")
-        block_service_status = relays.set_enabled_elements(app, test_relay)
+        block_service_status = relays.set_enabled_elements(test_relay)
         elements = relays.get_prot_elements(test_relay)
         active_elements = relays.get_active_elements(elements, fault_type)
         for element in active_elements:

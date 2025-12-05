@@ -1,7 +1,11 @@
+import sys
+from typing import List, Dict, Union
+sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
+import powerfactorytyping as pft
 import script_classes as dd
 
 
-def get_floating_terminals(app, feeder, devices) -> dict[object:dict[object:object]]:
+def get_floating_terminals(feeder: dd.Feeder, devices: List[dd.Device]) -> Dict:
     """
     Outputs all floating terminal objects with their associated line objects for all devices
     :param feeder:
@@ -28,7 +32,7 @@ def get_floating_terminals(app, feeder, devices) -> dict[object:dict[object:obje
     return floating_terms
 
 
-def find_end_points(feeder: object) -> list[object]:
+def find_end_points(feeder: pft.ElmFeeder) -> List[pft.ElmLne]:
     """
     Returns a list of sections with only one connection (i.e. end points).
     :param feeder: The feeder being investigated.
