@@ -17,19 +17,15 @@ class FaultLevelStudy:
 
         radial_list, lines_oos = self.mesh_feeder_check()
         feeder_list, external_grid = self.feeders_external_grid(radial_list, lines_oos)
-        if 'Fault Level Study (legacy)' in study_selections:
+        if 'Fault Level Study (all relays configured in model)' in study_selections:
+            feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
+            self.chk_empty_fdrs(feeders_devices)
+            user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=True)
+        else:
             feeders_devices, bu_devices = self.get_feeder_switches(feeder_list, region)
             self.chk_empty_fdrs(feeders_devices)
             user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=False)
             feeders_devices = user_selection
-        elif "Fault Level Study (no relays configured in model)" in study_selections:
-            feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
-            self.chk_empty_fdrs(feeders_devices)
-            user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=False)
-        else:
-            feeders_devices, bu_devices = self.get_feeders_devices(feeder_list)
-            self.chk_empty_fdrs(feeders_devices)
-            user_selection = self.run_window(feeder_list, feeders_devices, region, relays_configured=True)
         return feeders_devices, bu_devices, user_selection, external_grid
 
     def center_window(self, root, width, height):

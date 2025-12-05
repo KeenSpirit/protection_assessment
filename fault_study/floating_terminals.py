@@ -53,7 +53,7 @@ def find_end_points(feeder: pft.ElmFeeder) -> List[pft.ElmLne]:
         else:
             bus1 = []
         if (elmlne.GetAttribute('bus2') is not None
-                and elmlne.bus2.GetAttribute('cterm')is not None):
+                and elmlne.bus2.GetAttribute('cterm') is not None):
             bus2 = [x.GetAttribute('obj_id') for x in elmlne.bus2.cterm.GetConnectedCubicles()
                     if x is not elmlne.GetAttribute('bus2')
                     if x.obj_id.GetClassName() == dd.ElementType.LINE.value]
