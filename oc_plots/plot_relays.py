@@ -1,8 +1,7 @@
 import math
 import time
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from devices import fuses as ds
 from oc_plots import get_rmu_fuses as grf
 from pf_protection_helper import create_obj, obtain_region

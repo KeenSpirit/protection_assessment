@@ -11,8 +11,7 @@ It also defines various element types used by the script
 from enum import Enum
 from dataclasses import dataclass
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from typing import List, Dict, Union, Any, Optional
 from typing import Optional, Dict
 

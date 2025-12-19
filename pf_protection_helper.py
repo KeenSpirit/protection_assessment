@@ -7,8 +7,7 @@ supported in here are:
 import uuid
 from contextlib import contextmanager
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 __all__ = ['app_manager'
     , 'project_manager'

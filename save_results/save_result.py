@@ -6,8 +6,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from cond_damage import apply_results as ar
 from fault_study import fault_impedance
 from devices import relays

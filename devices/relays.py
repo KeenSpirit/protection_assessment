@@ -1,7 +1,6 @@
 import math
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from typing import Union, Dict, List, Tuple
 from fault_study import fault_impedance
 import script_classes as dd

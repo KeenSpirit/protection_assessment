@@ -3,8 +3,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 from typing import List, Dict
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 
 def mesh_feeder_check(app: pft.Application):

@@ -13,8 +13,7 @@ Main workflow:
 import sys
 
 from typing import List, Dict, Union
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 import pf_protection_helper as helper
 from fault_study import analysis, fault_impedance, floating_terminals as ft
 import script_classes as dd

@@ -1,7 +1,6 @@
 import sys
 from typing import List, Union
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 import script_classes as dd
 
 

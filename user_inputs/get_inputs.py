@@ -1,7 +1,6 @@
 from tkinter import *  # noqa [F403]
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 import script_classes as dd
 import tkinter as tk
 from tkinter import ttk

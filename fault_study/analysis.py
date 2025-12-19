@@ -1,7 +1,6 @@
 from typing import Union
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from fault_study import study_templates
 
 

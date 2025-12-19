@@ -1,6 +1,5 @@
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 def output_results(app, sub_name, external_grid, feeders_devices_inrush, results_max_3p, results_max_2p,
             results_max_pg, results_min_2p, results_min_3p, results_min_pg, result_sys_norm_min_2p,

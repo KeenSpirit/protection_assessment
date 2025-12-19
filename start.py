@@ -1,8 +1,7 @@
 import time
 import powerfactory as pf
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from typing import Union, Dict, List
 import pf_protection_helper as helper
 import model_checks

@@ -9,8 +9,7 @@ from typing import Dict, Any
 from enum import Enum
 import sys
 
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 
 # =============================================================================
