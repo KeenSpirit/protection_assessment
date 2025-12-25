@@ -69,267 +69,349 @@ class FaultCurrents:
 
 @dataclass
 class Feeder:
+    """
+    Represents a distribution feeder and its associated devices.
+
+    Attributes:
+        obj: The PowerFactory ElmFeeder object
+        cubicle: The feeder's source cubicle
+        term: The source terminal
+        sys_volts: System voltage in kV
+        devices: List of protection devices on this feeder
+        bu_devices: Backup devices dictionary
+        open_points: Network open points dictionary
+    """
     obj: pft.ElmFeeder
     cubicle: pft.StaCubic
     term: pft.ElmTerm
     sys_volts: float
-    devices: list
-    bu_devices: Dict
-    open_points: Dict
+    devices: List[Any] = field(default_factory=list)
+    bu_devices: Dict[str, Any] = field(default_factory=dict)
+    open_points: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class Device:
+    """
+    Represents a protection device (relay or fuse) with its electrical context.
+
+    Attributes:
+        obj: The PowerFactory device object (ElmRelay or RelFuse)
+        cubicle: The device's cubicle location
+        term: The connected terminal
+        phases: Number of phases (1, 2, or 3)
+        l_l_volts: Line-to-line voltage in kV
+
+    Fault Currents (populated by fault studies):
+        max_fl_3ph, max_fl_2ph, max_fl_pg: Maximum fault currents
+        min_fl_3ph, min_fl_2ph, min_fl_pg: Minimum fault currents
+        min_sn_fl_2ph, min_sn_fl_pg: Minimum system normal fault currents
+
+    Topology (populated by network tracing):
+        sect_terms: Downstream terminals in this section
+        sect_loads: Downstream loads in this section
+        sect_lines: Lines in this section
+        us_devices: Upstream protection devices
+        ds_devices: Downstream protection devices
+    """
+    # Core identification - always required
     obj: Any
     cubicle: pft.StaCubic
     term: pft.ElmTerm
     phases: int
     l_l_volts: float
-    ds_capacity: Optional[float]
-    max_fl_3ph: Optional[float]
-    max_fl_2ph: Optional[float]
-    max_fl_pg: Optional[float]
-    min_fl_3ph: Optional[float]
-    min_fl_2ph: Optional[float]
-    min_fl_pg: Optional[float]
-    min_sn_fl_2ph: Optional[float]
-    min_sn_fl_pg: Optional[float]
-    max_ds_tr: Optional[float]
-    sect_terms: list
-    sect_loads: list
-    sect_lines: list
-    us_devices: list
-    ds_devices: list
+
+    # Capacity data - populated during analysis
+    ds_capacity: Optional[float] = None
+    max_ds_tr: Optional[float] = None
+
+    # Maximum fault currents - populated by fault study
+    max_fl_3ph: Optional[float] = None
+    max_fl_2ph: Optional[float] = None
+    max_fl_pg: Optional[float] = None
+
+    # Minimum fault currents - populated by fault study
+    min_fl_3ph: Optional[float] = None
+    min_fl_2ph: Optional[float] = None
+    min_fl_pg: Optional[float] = None
+
+    # Minimum system normal fault currents - populated by fault study
+    min_sn_fl_2ph: Optional[float] = None
+    min_sn_fl_pg: Optional[float] = None
+
+    # Topology - populated by network tracing
+    sect_terms: List[Any] = field(default_factory=list)
+    sect_loads: List[Any] = field(default_factory=list)
+    sect_lines: List[Any] = field(default_factory=list)
+    us_devices: List[Any] = field(default_factory=list)
+    ds_devices: List[Any] = field(default_factory=list)
 
 
 @dataclass
 class Termination:
+    """
+    Represents a network terminal with fault current data.
+
+    The terminal collects fault study results for protection coordination.
+
+    Attributes:
+        obj: The PowerFactory ElmTerm object
+        phases: Number of phases (1, 2, or 3)
+        l_l_volts: Line-to-line voltage in kV
+        constr: Construction type (OH, UG, SWER) - set during analysis
+        fault_data: Complete fault current data - set after fault studies
+    """
+    # Core identification - always required
     obj: pft.ElmTerm
-    constr: Optional[str]
     phases: int
     l_l_volts: float
-    max_fl_3ph: float
-    max_fl_2ph: float
-    max_fl_pg: float
-    min_fl_3ph: float
-    min_fl_2ph: float
-    min_fl_pg: float
-    min_fl_pg10: float
-    min_fl_pg50: float
-    min_sn_fl_2ph: float
-    min_sn_fl_pg: float
-    min_sn_fl_pg10: float
-    min_sn_fl_pg50: float
+
+    # Construction type - determined during analysis
+    constr: Optional[str] = None
+
+    # Fault currents - populated by fault study
+    max_fl_3ph: Optional[float] = None
+    max_fl_2ph: Optional[float] = None
+    max_fl_pg: Optional[float] = None
+    min_fl_3ph: Optional[float] = None
+    min_fl_2ph: Optional[float] = None
+    min_fl_pg: Optional[float] = None
+    min_fl_pg10: Optional[float] = None
+    min_fl_pg50: Optional[float] = None
+    min_sn_fl_2ph: Optional[float] = None
+    min_sn_fl_pg: Optional[float] = None
+    min_sn_fl_pg10: Optional[float] = None
+    min_sn_fl_pg50: Optional[float] = None
     max_faults: Optional[FaultCurrents] = None
     min_faults: Optional[FaultCurrents] = None
 
 @dataclass
 class Line:
+    """
+        Represents a distribution line with fault current and energy data.
+
+        Attributes:
+            obj: The PowerFactory ElmLne object
+            phases: Number of phases (1, 2, or 3)
+            l_l_volts: Line-to-line voltage in kV
+            line_type: Conductor type description
+            thermal_rating: Thermal current rating in Amps
+
+        Fault Currents (populated by fault studies):
+            max_fl_*, min_fl_*, min_sn_fl_*: Various fault current values
+
+        Energy Data (populated by energy calculations):
+            ph_energy, pg_energy: Let-through energy values
+            ph_clear_time, pg_clear_time: Clearing times
+            ph_fl, pg_fl: Fault levels used for energy calculation
+        """
+    # Core identification - always required
     obj: pft.ElmLne
     phases: int
     l_l_volts: float
-    max_fl_3ph: float
-    max_fl_2ph: float
-    max_fl_pg: float
-    min_fl_3ph: float
-    min_fl_2ph: float
-    min_fl_pg: float
-    min_sn_fl_2ph: float
-    min_sn_fl_pg: float
     line_type: str
-    thermal_rating: float
-    ph_energy: float
-    ph_clear_time: float
-    ph_fl: float
-    pg_energy: float
-    pg_clear_time: float
-    pg_fl: float
+    thermal_rating: Union[float, str]  # Can be 'NA' for cables
+
+    # Maximum fault currents - populated by fault study
+    max_fl_3ph: Optional[float] = None
+    max_fl_2ph: Optional[float] = None
+    max_fl_pg: Optional[float] = None
+
+    # Minimum fault currents - populated by fault study
+    min_fl_3ph: Optional[float] = None
+    min_fl_2ph: Optional[float] = None
+    min_fl_pg: Optional[float] = None
+
+    # Minimum system normal fault currents
+    min_sn_fl_2ph: Optional[float] = None
+    min_sn_fl_pg: Optional[float] = None
+
+    # Energy calculations - populated during analysis
+    ph_energy: Optional[float] = None
+    ph_clear_time: Optional[float] = None
+    ph_fl: Optional[float] = None
+    pg_energy: Optional[float] = None
+    pg_clear_time: Optional[float] = None
+    pg_fl: Optional[float] = None
 
 
 @dataclass
 class Tfmr:
-    obj: Union[pft.ElmLod, pft.ElmTr2]
-    term: pft.ElmTerm
-    load_kva: Optional[float]
-    max_ph: Optional[str]
-    max_pg: Optional[str]
-    fuse: Optional[str]
-    insulation: Optional[str]
-    impedance: Optional[str]
+    """
+    Represents a transformer or load for fusing coordination.
+
+    Attributes:
+        obj: The PowerFactory object (ElmLod or ElmTr2), or None
+        term: The HV terminal connection
+        load_kva: Rated capacity in kVA
+        max_ph: Maximum phase fault at transformer
+        max_pg: Maximum phase-ground fault at transformer
+        fuse: Associated fuse type/size
+        insulation: Insulation class
+        impedance: Transformer impedance
+    """
+    obj: Optional[Union[pft.ElmLod, pft.ElmTr2]] = None
+    term: Optional[pft.ElmTerm] = None
+    load_kva: Optional[float] = None
+    max_ph: Optional[str] = None
+    max_pg: Optional[str] = None
+    fuse: Optional[str] = None
+    insulation: Optional[str] = None
+    impedance: Optional[str] = None
 
 
-def initialise_fdr_dataclass(element: Any) -> Feeder:
+def initialise_fdr_dataclass(element: pft.ElmFeeder) -> Feeder:
+    """
+    Initialize a Feeder dataclass from a PowerFactory ElmFeeder.
 
-    dataclass = Feeder(
-            element,
-            element.obj_id,
-            element.cn_bus,
-            element.cn_bus.uknom,
-            [],
-            [],
-            {}
-            )
-    return dataclass
+    Args:
+        element: The PowerFactory feeder object
+
+    Returns:
+        Initialized Feeder dataclass
+    """
+    return Feeder(
+        obj=element,
+        cubicle=element.obj_id,
+        term=element.cn_bus,
+        sys_volts=element.cn_bus.uknom,
+    )
 
 
 def initialise_dev_dataclass(element: Any) -> Device:
+    """
+    Initialize a Device dataclass from a PowerFactory protection device.
 
+    Args:
+        element: The PowerFactory device object (ElmRelay, RelFuse, etc.)
+
+    Returns:
+        Initialized Device dataclass, or None if element is None
+    """
     if element is None:
         return None
-    if element.GetClassName() == ElementType.FEEDER.value:
+
+    # Determine the cubicle based on element type
+    class_name = element.GetClassName()
+    if class_name == ElementType.FEEDER.value:
         cubicle = element.obj_id
-    elif element.GetClassName() == ElementType.COUPLER.value:
+    elif class_name == ElementType.COUPLER.value:
         cubicle = element.bus1
     else:
         cubicle = element.fold_id
 
-    dataclass = Device(
-            element,
-            cubicle,
-            cubicle.cterm,
-            ph_attr_lookup(cubicle.cterm.phtech),
-            round(cubicle.cterm.uknom, 2),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            [],
-            [],
-            [],
-            [],
-            []
-            )
-    return dataclass
+    return Device(
+        obj=element,
+        cubicle=cubicle,
+        term=cubicle.cterm,
+        phases=ph_attr_lookup(cubicle.cterm.phtech),
+        l_l_volts=round(cubicle.cterm.uknom, 2),
+    )
 
 
-def initialise_term_dataclass(elmterm: pft.ElmTerm) -> Union[None, Termination]:
+def initialise_term_dataclass(elmterm: pft.ElmTerm) -> Optional[Termination]:
+    """
+    Initialize a Termination dataclass from a PowerFactory ElmTerm.
 
+    Args:
+        elmterm: The PowerFactory terminal object
+
+    Returns:
+        Initialized Termination dataclass, or None if elmterm is None
+    """
     if elmterm is None:
         return None
-    dataclass = Termination(
-            elmterm,
-            None,
-            ph_attr_lookup(elmterm.phtech),
-            round(elmterm.uknom,2),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None
-            )
-    return dataclass
+
+    return Termination(
+        obj=elmterm,
+        phases=ph_attr_lookup(elmterm.phtech),
+        l_l_volts=round(elmterm.uknom, 2),
+    )
 
 
-def initialise_line_dataclass(elmlne: pft.ElmLne) -> Union[None, Line]:
+def initialise_line_dataclass(elmlne: pft.ElmLne) -> Optional[Line]:
+    """
+    Initialize a Line dataclass from a PowerFactory ElmLne.
 
+    Args:
+        elmlne: The PowerFactory line object
+
+    Returns:
+        Initialized Line dataclass, or None if elmlne is None
+    """
     if elmlne is None:
         return None
 
-    def _get_phases(elmlne) -> int:
-        """Looks at the tower geometry or the cable system to return the number
-        of phases.
-        """
-        construction = elmlne.typ_id.GetClassName()
+    def _get_phases(line: pft.ElmLne) -> int:
+        """Get number of phases from line construction type."""
+        construction = line.typ_id.GetClassName()
 
         if construction == 'TypGeo':
-            TypGeo = elmlne.typ_id
-            num_phases = TypGeo.xy_c[0][0]
+            return int(line.typ_id.xy_c[0][0])
         elif construction == 'TypCabsys':
-            num_phases = elmlne.typ_id.GetAttribute('nphas')[0]
+            return int(line.typ_id.GetAttribute('nphas')[0])
         elif construction == "TypLne":
-            num_phases = elmlne.typ_id.GetAttribute('nlnph')
+            return int(line.typ_id.GetAttribute('nlnph'))
         else:
-            raise TypeError(f'{construction} Unhandelled construction')
+            raise TypeError(f'{construction} Unhandled construction type')
 
-        return int(num_phases)
-
-    def _get_voltage(elmlne: pft.ElmLne) -> float:
-        """
-        Get the line-line operating voltage of the given ElmLne element.
-        :param line:
-        :return:
-        """
-
-        terms = elmlne.GetConnectedElements()
-        l_l_volts = 0
-        for term in terms:
+    def _get_voltage(line: pft.ElmLne) -> float:
+        """Get line-to-line operating voltage."""
+        for term in line.GetConnectedElements():
             try:
-                l_l_volts = term.uknom
-                break
+                return term.uknom
             except AttributeError:
                 pass
-        return l_l_volts
+        return 0.0
 
-    def _get_conductor(elmlne: pft.ElmLne) -> str:
-        """Looks at the tower geometry or the cable system to return the conductor type and thermal rating
-        """
-        construction = elmlne.typ_id.GetClassName()
+    def _get_conductor_info(line: pft.ElmLne) -> tuple:
+        """Get conductor type and thermal rating."""
+        construction = line.typ_id.GetClassName()
 
         if construction == 'TypGeo':
-            TypCon = elmlne.GetAttribute("e:pCondCir")
-            conductor_type = TypCon.loc_name
-            thermal_rating = round(TypCon.GetAttribute("e:Ithr"), 3) * 1000
-        elif construction == 'TypCabsys':
-            conductor_type = 'NA'
-            thermal_rating = 'NA'
+            typ_con = line.GetAttribute("e:pCondCir")
+            return typ_con.loc_name, round(typ_con.GetAttribute("e:Ithr"), 3) * 1000
         elif construction == "TypLne":
-            conductor_type = elmlne.typ_id.loc_name
-            thermal_rating = round(elmlne.typ_id.GetAttribute("e:Ithr"), 3) * 1000
-        elif construction == "TypTow":
-            conductor_type = 'NA'
-            thermal_rating = 'NA'
+            return line.typ_id.loc_name, round(line.typ_id.GetAttribute("e:Ithr"), 3) * 1000
         else:
-            conductor_type = 'NA'
-            thermal_rating = 'NA'
-        return conductor_type, thermal_rating
+            return 'NA', 'NA'
 
-    phases = _get_phases(elmlne)
-    voltage = _get_voltage(elmlne)
-    line_type, line_therm_rating = _get_conductor(elmlne)
+    line_type, thermal_rating = _get_conductor_info(elmlne)
 
-    dataclass = Line(
-            elmlne,
-            phases,
-            voltage,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            line_type,
-            line_therm_rating,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None)
-    return dataclass
+    return Line(
+        obj=elmlne,
+        phases=_get_phases(elmlne),
+        l_l_volts=_get_voltage(elmlne),
+        line_type=line_type,
+        thermal_rating=thermal_rating,
+    )
 
 
-def initialise_load_dataclass(load: Union[None, pft.ElmLod, pft.ElmTr2]) -> Union[None, Tfmr]:
+def initialise_load_dataclass(load: Union[None, pft.ElmLod, pft.ElmTr2]) -> Optional[Tfmr]:
+    """
+    Initialize a Tfmr dataclass from a PowerFactory load or transformer.
+
+    Args:
+        load: The PowerFactory load (ElmLod) or transformer (ElmTr2) object
+
+    Returns:
+        Initialized Tfmr dataclass (empty if load is None)
+    """
     if load is None:
-        return Tfmr(None, None, None, None, None, None, None, None)
+        return Tfmr()
     if load.GetClassName() == ElementType.LOAD.value:
-        return Tfmr(load, load.bus1.cterm, round(load.Strat), None, None, None, None, None)
+        return Tfmr(
+            obj=load,
+            term=load.bus1.cterm,
+            load_kva=round(load.Strat),
+        )
     if load.GetClassName() == ElementType.TFMR.value:
-        return Tfmr(load, load.bushv.cterm, round(load.Snom_a * 1000), None, None, None, None, None)
+        return Tfmr(
+            obj=load,
+            term=load.bushv.cterm,
+            load_kva=round(load.Snom_a * 1000),
+        )
+    return Tfmr()
 
 
 def ph_attr_lookup(attr: int):
