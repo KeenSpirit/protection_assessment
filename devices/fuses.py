@@ -9,21 +9,6 @@ reload(fm)
 reload(dd)
 
 
-def get_all_relays(app: pft.Application) -> List[pft.ElmRelay]:
-    net_mod = app.GetProjectFolder("netmod")
-    # Filter for relays under network model recursively.
-    all_relays = net_mod.GetContents("*.ElmRelay", True)
-    relays = [
-        relay
-        for relay in all_relays
-        if relay.cpGrid
-        if relay.cpGrid.IsCalcRelevant()
-        if relay.GetParent().GetClassName() == "StaCubic"
-        if not relay.IsOutOfService()
-    ]
-    return relays
-
-
 def get_all_fuses(app: pft.Application) -> List[pft.RelFuse]:
     net_mod = app.GetProjectFolder("netmod")
     all_fuses = net_mod.GetContents("*.RelFuse", True)
