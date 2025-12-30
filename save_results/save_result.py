@@ -7,16 +7,16 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import sys
 from pf_config import pft
-from cond_damage import apply_results as ar
 from fault_study import fault_impedance
 from devices import relays
+from save_results import cond_dmg_results as cd
 from importlib import reload
 import re
 import numpy as np
 
 reload(fault_impedance)
 reload(relays)
-
+reload(cd)
 
 def save_dataframe(app, region, study_selections, external_grid, feeders):
     """ saves the dataframe in the user directory.
@@ -139,7 +139,7 @@ def save_dataframe(app, region, study_selections, external_grid, feeders):
             # Conductor Damage Results
             if 'Conductor Damage Assessment' in study_selections:
                 devices = [fdr.devices for fdr in feeders if fdr.obj.loc_name == feeder][0]
-                cond_damage_df = ar.cond_damage_results(devices)
+                cond_damage_df = cd.cond_damage_results(devices)
                 cond_damage_df = clean_dataframe(cond_damage_df)
                 cond_damage_df = ensure_numeric_types(cond_damage_df)
 
@@ -433,7 +433,7 @@ def format_detailed_results(app, region, devices):
     """
     dfls_list = []
     for device in devices:
-        device_reach_factors = relays.device_reach_factors(region, device)
+        device_reach_factors = relays.device_reach_factors(region, device, device.sect_terms)
 
         # Safely extract device name and terms
         device_name = str(device.obj.loc_name) if device.obj is not None else 'Unknown Device'

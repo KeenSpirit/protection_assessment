@@ -9,11 +9,9 @@ This module is used for defining and initiliasing each dataclass
 It also defines various element types used by the script
 """
 from enum import Enum
-from dataclasses import dataclass
-import sys
+from dataclasses import dataclass, field
 from pf_config import pft
 from typing import List, Dict, Union, Any, Optional
-from typing import Optional, Dict
 
 
 class ElementType(Enum):

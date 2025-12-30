@@ -16,8 +16,9 @@ from devices import fuses as ds, relays
 from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 import logging.config
-from logging_config import configure_logging as cl
+from config_logging import configure_logging as cl
 from test_package import test_module
+from colour_maps import colour_maps as cm
 
 from importlib import reload
 reload(model_checks)
@@ -35,6 +36,7 @@ reload(grf)
 reload(test_module)
 reload(sb)
 reload(find_sub)
+reload(cm)
 
 
 def main(app: pft.Application):
@@ -67,6 +69,7 @@ def main(app: pft.Application):
     feeders_devices, bu_devices, user_selection, external_grid = gi.get_input(app, region, study_selections)
     feeders = cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices)
 
+
     # Turn on all grids momentarily to load all floating terminals in to line connected elements
     user_selected_study_case = app.GetActiveStudyCase()
     switch_study_case(app, user_selected_study_case, all_grids=True)
@@ -74,7 +77,7 @@ def main(app: pft.Application):
 
     for feeder in feeders:
         gop.get_open_points(app, feeder)
-        fs.fault_study(app, external_grid, region, feeder)
+        fs.fault_study(app, external_grid, region, feeder, study_selections)
         if user_selection:
             selected_devices = [device for device in feeder.devices if device.obj in user_selection[feeder.obj.loc_name]]
             if 'Conductor Damage Assessment' in study_selections:
@@ -84,6 +87,7 @@ def main(app: pft.Application):
     if "Fault Level Study (legacy)" in study_selections:
         sb.bridge_results(app, external_grid, feeders)
     else:
+        cm.colour_map(app, region, feeders, study_selections)
         sr.save_dataframe(app, region, study_selections, external_grid, feeders)
 
 

@@ -1,5 +1,4 @@
 import math
-import sys
 from pf_config import pft
 from typing import Union, Dict, List, Tuple
 from fault_study import fault_impedance
@@ -258,10 +257,11 @@ def reset_block_service_status(block_service_status: Dict):
     return
 
 
-def device_reach_factors(region: str, device: Union[pft.ElmRelay, pft.RelFuse]) -> Dict:
+def device_reach_factors(region: str, device: Union[pft.ElmRelay, pft.RelFuse], elements: List[Union[pft.ElmTerm, pft.ElmLne]]) -> Dict:
     """
 
     :param device:
+    :param elements:
     :return:
     """
 
@@ -281,37 +281,46 @@ def device_reach_factors(region: str, device: Union[pft.ElmRelay, pft.RelFuse]) 
         effective_ef_pickup = 0
 
     # PRIMARY REACH FACTORS
+    # Earth Fault Reach Factor
     if effective_ef_pickup > 0:
         ef_rf = []
-        for term in device.sect_terms:
-            term_fl_pg = fault_impedance.term_pg_fl(region, term)
-            device_fl = swer_transform(device, term, term_fl_pg)
-            if device_fl != term_fl_pg:
+        for element in elements:
+            if element.obj.GetClassName == dd.ElementType.TERM.value:
+                element_fl_pg = fault_impedance.term_pg_fl(region, element)
+            else:
+                element_fl_pg = element.min_fl_pg
+            device_fl = swer_transform(device, element, element_fl_pg)
+            if device_fl != element_fl_pg:
                 # device is seeing 2P fault current from a 1P SWER term
                 ef_rf.append(round(device_fl / ph_pickup, 2))
             else:
                 ef_rf.append(round(device_fl / effective_ef_pickup, 2))
     else:
-        ef_rf = ['NA'] * len(device.sect_terms)
+        ef_rf = ['NA'] * len(elements)
+    # Phase Fault Reach Factor
     if ph_pickup > 0:
-        ph_rf = [round(term.min_fl_2ph / ph_pickup, 2) for term in device.sect_terms]
+        ph_rf = [round(element.min_fl_2ph / ph_pickup, 2) for element in elements]
     else:
-        ph_rf = ['NA'] * len(device.sect_terms)
+        ph_rf = ['NA'] * len(elements)
+    # NPS Reach Factor
     if nps_pickup > 0:
         nps_ef_rf = []
-        for term in device.sect_terms:
-            term_fl_pg = fault_impedance.term_pg_fl(region, term)
-            device_fl = swer_transform(device, term, term_fl_pg)
-            if  device_fl == term_fl_pg:
+        for element in elements:
+            if element.obj.GetClassName == dd.ElementType.TERM.value:
+                element_fl_pg = fault_impedance.term_pg_fl(region, element)
+            else:
+                element_fl_pg = element.min_fl_pg
+            device_fl = swer_transform(device, element, element_fl_pg)
+            if  device_fl == element_fl_pg:
                 # There is no SWER, the device sees earth fault
                 nps_ef_rf.append(round(device_fl / 3 / nps_pickup, 2))
             else:
                 # There is SWER, the device sees 2-Phase fault current
                 nps_ef_rf.append(round(device_fl / math.sqrt(3) / nps_pickup, 2))
-        nps_ph_rf = [round(term.min_fl_2ph/math.sqrt(3) / nps_pickup, 2) for term in device.sect_terms]
+        nps_ph_rf = [round(element.min_fl_2ph/math.sqrt(3) / nps_pickup, 2) for element in elements]
     else:
-        nps_ef_rf = ['NA'] * len(device.sect_terms)
-        nps_ph_rf = ['NA'] * len(device.sect_terms)
+        nps_ef_rf = ['NA'] * len(elements)
+        nps_ph_rf = ['NA'] * len(elements)
 
     # BACK-UP PICKUPS
     if device.us_devices:
@@ -344,57 +353,63 @@ def device_reach_factors(region: str, device: Union[pft.ElmRelay, pft.RelFuse]) 
         # BACK-UP REACH FACTORS
         if effective_bu_ef_pickup > 0:
             bu_ef_rf = []
-            for term in device.sect_terms:
-                term_fl_pg = fault_impedance.term_pg_fl(region, term)
-                bu_device_fl = swer_transform(bu_devices[0], term, term_fl_pg)
-                if bu_device_fl != term_fl_pg:
+            for element in elements:
+                if element.obj.GetClassName == dd.ElementType.TERM.value:
+                    element_fl_pg = fault_impedance.term_pg_fl(region, element)
+                else:
+                    element_fl_pg = element.min_fl_pg
+                bu_device_fl = swer_transform(bu_devices[0], element, element_fl_pg)
+                if bu_device_fl != element_fl_pg:
                     # device is seeing 2P fault current from a 1P SWER term
                     bu_ef_rf.append(round(bu_device_fl / bu_ph_pickup, 2))
                 else:
                     bu_ef_rf.append(round(bu_device_fl / effective_bu_ef_pickup, 2))
         else:
-            bu_ef_rf = ['NA'] * len(device.sect_terms)
+            bu_ef_rf = ['NA'] * len(elements)
         if bu_ph_pickup > 0:
-            bu_ph_rf = [round(term.min_fl_2ph / bu_ph_pickup, 2) for term in device.sect_terms]
+            bu_ph_rf = [round(element.min_fl_2ph / bu_ph_pickup, 2) for element in elements]
         else:
-            bu_ph_rf = ['NA'] * len(device.sect_terms)
+            bu_ph_rf = ['NA'] * len(elements)
         if bu_nps_pickup > 0:
             bu_nps_ef_rf = []
-            for term in device.sect_terms:
-                term_fl_pg = fault_impedance.term_pg_fl(region, term)
-                bu_device_fl = swer_transform(bu_devices[0], term, term_fl_pg)
-                if bu_device_fl == term_fl_pg:
+            for element in elements:
+                if element.obj.GetClassName == dd.ElementType.TERM.value:
+                    element_fl_pg = fault_impedance.term_pg_fl(region, element)
+                else:
+                    element_fl_pg = element.min_fl_pg
+                bu_device_fl = swer_transform(bu_devices[0], element, element_fl_pg)
+                if bu_device_fl == element_fl_pg:
                     # There is no SWER, the device sees earth fault
                     bu_nps_ef_rf.append(round(bu_device_fl / 3 / bu_nps_pickup, 2))
                 else:
                     # There is SWER, the device sees 2-Phase fault current
                     bu_nps_ef_rf.append(round(bu_device_fl / math.sqrt(3) / bu_nps_pickup, 2))
-            bu_nps_ph_rf = [round(term.min_fl_2ph / math.sqrt(3) / bu_nps_pickup, 2) for term in device.sect_terms]
+            bu_nps_ph_rf = [round(element.min_fl_2ph / math.sqrt(3) / bu_nps_pickup, 2) for element in elements]
         else:
-            bu_nps_ef_rf = ['NA'] * len(device.sect_terms)
-            bu_nps_ph_rf = ['NA'] * len(device.sect_terms)
+            bu_nps_ef_rf = ['NA'] * len(elements)
+            bu_nps_ph_rf = ['NA'] * len(elements)
     else:
         # NO BACK-UP
         bu_device = None
         bu_ef_pickup = 'NA'
         bu_ph_pickup = 'NA'
         bu_nps_pickup = 'NA'
-        bu_ef_rf = ['NA'] * len(device.sect_terms)
-        bu_ph_rf = ['NA'] * len(device.sect_terms)
-        bu_nps_ef_rf = ['NA'] * len(device.sect_terms)
-        bu_nps_ph_rf = ['NA'] * len(device.sect_terms)
+        bu_ef_rf = ['NA'] * len(elements)
+        bu_ph_rf = ['NA'] * len(elements)
+        bu_nps_ef_rf = ['NA'] * len(elements)
+        bu_nps_ph_rf = ['NA'] * len(elements)
 
     device_reach_factors = {
-        'ef_pickup' : [ef_pickup] * len(device.sect_terms),
-        'ph_pickup' : [ph_pickup] * len(device.sect_terms),
-        'nps_pickup' : [nps_pickup] * len(device.sect_terms),
+        'ef_pickup' : [ef_pickup] * len(elements),
+        'ph_pickup' : [ph_pickup] * len(elements),
+        'nps_pickup' : [nps_pickup] * len(elements),
         'ef_rf' : ef_rf,
         'ph_rf' : ph_rf,
         'nps_ef_rf' : nps_ef_rf,
         'nps_ph_rf' : nps_ph_rf,
-        'bu_ef_pickup' : [bu_ef_pickup] * len(device.sect_terms),
-        'bu_ph_pickup' : [bu_ph_pickup] * len(device.sect_terms),
-        'bu_nps_pickup' : [bu_nps_pickup] * len(device.sect_terms),
+        'bu_ef_pickup' : [bu_ef_pickup] * len(elements),
+        'bu_ph_pickup' : [bu_ph_pickup] * len(elements),
+        'bu_nps_pickup' : [bu_nps_pickup] * len(elements),
         'bu_ef_rf' : bu_ef_rf,
         'bu_ph_rf' : bu_ph_rf,
         'bu_nps_ef_rf' : bu_nps_ef_rf,

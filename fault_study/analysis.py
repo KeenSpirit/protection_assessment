@@ -1,31 +1,26 @@
-from typing import Union
-import sys
+from typing import Optional
 from pf_config import pft
 from fault_study import study_templates
+from importlib import reload
+reload(study_templates)
 
 
-def short_circuit(app, bound: str, f_type: str, location: Union[pft.ElmTerm, None] = None, ppro: int = 0) -> pft.ComShc:
+def short_circuit(app, bound: str, f_type: str, consider_prot: str, location: Optional[pft.ElmLne] = None, relative: int = 0) -> pft.ComShc:
     """
     Set the Short-circuit command module and perform a short-circuit calculation
     :param app:
     :param bound: 'Max', 'Min'
     :param f_type: '3-Phase', '2-Phase', "Phase-Ground"
+    :param consider_prot: 'None', 'All'
     :param location: element location of fault. None if All Busbars
-    :param ppro: fault distance from terminal
+    :param relative: fault distance from terminal
     :return: Short-Circuit Command
     """
 
-    ComShc = app.GetFromStudyCase("Short_Circuit.ComShc")
-    study_templates.apply_sc(ComShc, bound, f_type)
-    if location:
-        ComShc.SetAttribute("e:iopt_allbus", 0)
-        ComShc.SetAttribute("e:shcobj", location)
-        ComShc.SetAttribute("e:iopt_dfr", 0)
-        ComShc.SetAttribute("e:ppro", ppro)
-    else:
-        ComShc.SetAttribute("e:iopt_allbus", 1)
+    comshc = app.GetFromStudyCase("Short_Circuit.ComShc")
+    study_templates.apply_sc(comshc, bound, f_type, consider_prot, location, relative)
 
-    return ComShc.Execute()
+    return comshc.Execute()
 
 
 def get_terminal_current(elmterm: pft.ElmTerm) -> float:
