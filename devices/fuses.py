@@ -2,27 +2,11 @@ from devices import fuse_mapping as fm
 import pf_protection_helper as helper
 from importlib import reload
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from typing import Union, List
 import script_classes as dd
 reload(fm)
 reload(dd)
-
-
-def get_all_relays(app: pft.Application) -> List[pft.ElmRelay]:
-    net_mod = app.GetProjectFolder("netmod")
-    # Filter for relays under network model recursively.
-    all_relays = net_mod.GetContents("*.ElmRelay", True)
-    relays = [
-        relay
-        for relay in all_relays
-        if relay.cpGrid
-        if relay.cpGrid.IsCalcRelevant()
-        if relay.GetParent().GetClassName() == "StaCubic"
-        if not relay.IsOutOfService()
-    ]
-    return relays
 
 
 def get_all_fuses(app: pft.Application) -> List[pft.RelFuse]:

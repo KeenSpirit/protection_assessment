@@ -1,6 +1,5 @@
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from typing import List, Dict
 from fdr_open_points import fdr_open_user_input as foui
 import script_classes as dd

@@ -1,19 +1,14 @@
 import math
 from devices import relays
-from cond_damage import conditional_formatting as cf
-from cond_damage import apply_results as ar
 import script_classes as dd
 import logging
 
 from importlib import reload
 reload(relays)
-reload(cf)
-reload(ar)
 
 
 def cond_damage(app, feeder, devices):
 
-    cf.set_up(app, feeder)
     fl_step = 10
     for device in devices:
         dev_obj = device.obj
@@ -40,7 +35,6 @@ def cond_damage(app, feeder, devices):
                     logging.info(f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
                                  f"fault clearing time calculation error.")
             line.ph_energy = total_energy
-        ar.rewrite_results(app, lines, fault_type)
 
         line_fault_type = 'Phase-Ground'
         app.PrintPlain(f"Performing earth fault conductor damage assessment for {dev_obj.loc_name}...")
@@ -66,10 +60,6 @@ def cond_damage(app, feeder, devices):
                     logging.info(f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
                                  f"fault clearing time calculation error.")
             line.pg_energy = total_energy
-        ar.rewrite_results(app, lines, line_fault_type)
-    app.PrintPlain(
-        f"Conductor damage results saved in PowerFactory as used-defined diagram colouring schemes, '{feeder} Earth Flt Cond Damage' and '{feeder} Phase Flt Cond Damage'."
-    )
 
 
 def fault_clear_times(app, device, line, fl_step, fault_type):

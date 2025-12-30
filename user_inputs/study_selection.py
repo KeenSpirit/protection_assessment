@@ -3,8 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import List
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 
 

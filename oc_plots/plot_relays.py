@@ -1,8 +1,7 @@
 import math
 import time
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from devices import fuses as ds
 from oc_plots import get_rmu_fuses as grf
 from pf_protection_helper import create_obj, obtain_region
@@ -47,11 +46,12 @@ def plot_all_relays(app: pft.Application, feeder: dd.Feeder, selected_devices: L
                vipage = create_plot(app, plot_folder, colour_dic, devices, feeder.sys_volts, f_type='Phase')
                create_draw_format(vipage)
         else:
-            app.PrintPlain('No relays to plot')
+            app.PrintPlain(f'No relays in feeder {feeder.obj.loc_name} to plot.')
 
     study_case.Activate()
     directory = plot_folder.GetFullName()
-    app.PrintPlain(f"Time overcurrent plots saved in PowerFactory to {directory}")
+    app.PrintPlain(f"Time overcurrent plots saved in PowerFactory to the following location:  \n"
+                   f"{directory}")
 
 
 def new_page_format(app: pft.Application):
@@ -110,6 +110,7 @@ def update_ds_tr_data(app: pft.Application, device_list: List[dd.Device]):
                     tr_strings_dic[device.obj] = max_tr_string
         if tr_strings_dic:
             max_tr_strings = list(tr_strings_dic.values())
+            app.PrintPlain("Please enter distribution transformer fuse specification")
             results = grf.get_transformer_specifications(max_tr_strings)
             for device_object, string in tr_strings_dic.items():
                 device = [device for device in device_list if device.obj == device_object][0]

@@ -13,8 +13,7 @@ Main workflow:
 import sys
 
 from typing import List, Dict, Union
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 import pf_protection_helper as helper
 from fault_study import analysis, fault_impedance, floating_terminals as ft
 import script_classes as dd
@@ -26,7 +25,7 @@ reload(dd)
 reload(fault_impedance)
 
 
-def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: dd.Feeder):
+def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: dd.Feeder, study_selections: List[str]):
     """
 
     :param app:
@@ -37,7 +36,6 @@ def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: 
     """
 
     app.PrintPlain(f"Performing fault level study for {feeder.obj.loc_name}...")
-
     get_downstream_objects(app, feeder.devices)
     us_ds_device(feeder.devices, feeder.bu_devices)
     get_ds_capacity(feeder.devices)
@@ -53,27 +51,26 @@ def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: 
         ('Min', 'Ground Z50'),
     ]
 
+    if "Fault Level Study (all relays configured in model)" in study_selections:
+        consider_prot = 'All'
+    else:
+        consider_prot = 'None'
     for bound, fault_type in study_configs:
-        analysis.short_circuit(app, bound=bound, f_type=fault_type)
+        analysis.short_circuit(app, bound, fault_type, consider_prot)
         terminal_fls(feeder.devices, bound=bound, f_type=fault_type)
     if grid_equivalance_check(external_grid):
         copy_min_fls(feeder.devices)
     else:
         reset_min_source_imp(external_grid, sys_norm_min=True)
         for bound, fault_type in sn_study_configs:
-            analysis.short_circuit(app, bound=bound, f_type=fault_type)
+            analysis.short_circuit(app, bound, fault_type, consider_prot)
             terminal_fls(feeder.devices, bound='SN_Min', f_type=fault_type)
         reset_min_source_imp(external_grid, sys_norm_min=False)
-    # for device in feeder.devices:
-    #     terms = device.sect_terms
-    #     for term in terms:
-    #         app.PrintPlain(f"{term.obj.loc_name} min_fl_pg: {term.min_fl_pg}")
-    #         app.PrintPlain(f"{term.obj.loc_name} min_sn_fl_pg: {term.min_sn_fl_pg}")
 
     fault_impedance.update_node_construction(feeder.devices)
 
     floating_terms = ft.get_floating_terminals(feeder.obj, feeder.devices)
-    append_floating_terms(app, external_grid, feeder.devices, floating_terms)
+    append_floating_terms(app, external_grid, feeder.devices, floating_terms, consider_prot)
     update_device_data(region, feeder.devices)
     update_line_data(app, region, feeder.devices)
     for device in feeder.devices:
@@ -249,13 +246,14 @@ def terminal_fls(devices: List[dd.Device], bound: str, f_type: str):
                     terminal.min_sn_fl_2ph = analysis.get_terminal_current(elmterm)
 
 
-def append_floating_terms(app: pft.Application, external_grid: Dict, devices: List[dd.Device], floating_terms: Dict):
+def append_floating_terms(app: pft.Application, external_grid: Dict, devices: List[dd.Device], floating_terms: Dict, consider_prot: str):
     """
 
     :param app:
     :param external_grid:
     :param devices:
     :param floating_terms:
+    :param consider_prot:
     :return:
     """
 
@@ -272,7 +270,7 @@ def append_floating_terms(app: pft.Application, external_grid: Dict, devices: Li
                 ('Min', 'Ground Z10', 'min_fl_pg10'), ('Min', 'Ground Z50', 'min_fl_pg50'),
             ]
             for bound, fault_type, attribute in study_configs:
-                analysis.short_circuit(app, bound=bound, f_type=fault_type, location=line, ppro=ppro)
+                analysis.short_circuit(app, bound, fault_type, consider_prot, location=line, relative=ppro)
                 current = analysis.get_line_current(line)
                 setattr(termination, attribute, current)
 
@@ -288,7 +286,7 @@ def append_floating_terms(app: pft.Application, external_grid: Dict, devices: Li
                 ]
                 reset_min_source_imp(external_grid, sys_norm_min=True)
                 for bound, fault_type, attribute in sn_study_configs:
-                    analysis.short_circuit(app, bound=bound, f_type=fault_type, location=line, ppro=ppro)
+                    analysis.short_circuit(app, bound, fault_type, consider_prot, location=line, relative=ppro)
                     current = analysis.get_line_current(line)
                     setattr(termination, attribute, current)
                 reset_min_source_imp(external_grid, sys_norm_min=False)

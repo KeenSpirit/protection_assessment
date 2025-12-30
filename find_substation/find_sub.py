@@ -4,8 +4,7 @@ import powerfactory as pf
 from typing import List, Dict, Union
 import sys
 
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 
 def get_project(app: pft.Application):

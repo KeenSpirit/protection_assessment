@@ -1,7 +1,6 @@
 import math
 import sys
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 from legacy_script import save_results as sr
 from importlib import reload
 

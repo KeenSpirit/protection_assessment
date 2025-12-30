@@ -5,12 +5,10 @@ Uses a single dataclass with a factory function.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from enum import Enum
-import sys
 
-sys.path.append(r"\\Ecasd01\WksMgmt\PowerFactory\ScriptsDEV\PowerFactoryTyping")
-import powerfactorytyping as pft
+from pf_config import pft
 
 
 # =============================================================================
@@ -53,6 +51,18 @@ class EvtShcType(Enum):
     TWO_PHASE_TO_GROUND = 3
 
 
+class ConsiderProt(Enum):
+    """Consider Protection Devices."""
+    NONE = 0
+    ALL = 1
+
+
+class FaultLocation(Enum):
+    """Consider Protection Devices."""
+    USER_SELECTION = 0
+    BUSBARS_JUNCTIONS = 1
+
+
 # =============================================================================
 # UNIFIED SHORT-CIRCUIT CONFIGURATION DATACLASS
 # =============================================================================
@@ -88,13 +98,17 @@ class ShortCircuitConfig:
     iIgnLoad: bool = True
     iIgnLneCap: bool = True
     iIgnShnt: bool = True
-    iopt_prot: int = 1
     iIksForProt: int = ProtTrippingCurrent.TRANSIENT.value
     Rf: float = 0.0
     Xf: float = 0.0
+    iopt_allbus: int = FaultLocation.BUSBARS_JUNCTIONS.value
+    iopt_prot: int = ConsiderProt.ALL.value # Consider all protection devices
     # Optional fields for specific fault types
     i_p2psc: int = 0  # Used for 3-phase and 2-phase minimum faults
     i_pspgf: int = 0  # Used for ground faults
+    iopt_dfr: int = 0  # Used for User Selection; Terminal i or Terminal j
+    shcobj: Optional[pft.ElmLne] = None  # Used for User Selection
+    ppro: int = 1  # Used for User Selection; Fault Distance from Terminal i
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -106,7 +120,7 @@ class ShortCircuitConfig:
         base_fields = [
             'iopt_mde', 'iopt_shc', 'iopt_cur', 'iopt_cnf', 'ildfinit',
             'cfac_full', 'iIgnLoad', 'iIgnLneCap', 'iIgnShnt',
-            'iopt_prot', 'iIksForProt', 'Rf', 'Xf'
+            'iIksForProt', 'Rf', 'Xf', 'iopt_allbus', 'iopt_prot'
         ]
 
         result = {f: getattr(self, f) for f in base_fields}
@@ -118,6 +132,10 @@ class ShortCircuitConfig:
             # i_p2psc only for minimum 3-phase and 2-phase faults
             if self.iopt_shc in (FaultType.THREE_PHASE.value, FaultType.TWO_PHASE.value):
                 result['i_p2psc'] = self.i_p2psc
+        if self.iopt_allbus == FaultLocation.USER_SELECTION.value:
+            result['iopt_dfr'] = self.iopt_dfr
+            result['shcobj'] = self.shcobj
+            result['ppro'] = self.ppro
 
         return result
 
@@ -126,14 +144,16 @@ class ShortCircuitConfig:
 # FACTORY FUNCTION TO CREATE CONFIGURATIONS
 # =============================================================================
 
-def create_short_circuit_config(bound: str, fault_type: str) -> ShortCircuitConfig:
+def create_short_circuit_config(bound: str, fault_type: str, consider_prot: str, location: Optional[pft.ElmLne] = None, relative: int = 0) -> ShortCircuitConfig:
     """
     Factory function to create short-circuit study configurations.
 
     Args:
         bound: 'Max' or 'Min' for maximum/minimum fault level
         fault_type: '3-Phase', '2-Phase', 'Ground', 'Ground Z10', or 'Ground Z50'
-
+        consider_prot: 'None', 'All'
+        location: pft.ElmLne
+        relative: 0-99
     Returns:
         ShortCircuitConfig: Configured dataclass instance
 
@@ -166,11 +186,29 @@ def create_short_circuit_config(bound: str, fault_type: str) -> ShortCircuitConf
     else:
         raise ValueError(f"Unknown fault type: {fault_type}")
 
+    if location is not None:
+        iopt_allbus = 0
+        shcobj = location
+        ppro = relative
+    else:
+        iopt_allbus = 1
+        shcobj = None
+        ppro = 0
+
+    if consider_prot == 'All':
+        iopt_prot = ConsiderProt.ALL.value
+    else: # consider_prot == 'None':
+        iopt_prot = ConsiderProt.NONE.value
+
     return ShortCircuitConfig(
         iopt_shc=shc_type,
         iopt_cur=calc_bound,
         cfac_full=cfac,
-        Rf=rf
+        Rf=rf,
+        iopt_allbus=iopt_allbus,
+        shcobj=shcobj,
+        ppro=ppro,
+        iopt_prot=iopt_prot
     )
 
 
@@ -178,7 +216,7 @@ def create_short_circuit_config(bound: str, fault_type: str) -> ShortCircuitConf
 # APPLY FUNCTION
 # =============================================================================
 
-def apply_sc(comshc: pft.ComShc, bound: str, f_type: str) -> None:
+def apply_sc(comshc: pft.ComShc, bound: str, f_type: str, consider_prot: str, location: Optional[pft.ElmTerm] = None, relative: int = 0) -> None:
     """
     Configure PowerFactory short-circuit command with study parameters.
 
@@ -186,13 +224,16 @@ def apply_sc(comshc: pft.ComShc, bound: str, f_type: str) -> None:
         comshc: PowerFactory ComShc command object
         bound: 'Max' or 'Min' for maximum/minimum fault level
         f_type: '3-Phase', '2-Phase', 'Ground', 'Ground Z10', or 'Ground Z50'
+        consider_prot: 'None', 'All'
+        location: pft.ElmLne
+        relative: 0-99
 
     Example:
         ComShc = app.GetFromStudyCase("Short_Circuit.ComShc")
-        apply_sc(ComShc, 'Max', '3-Phase')
+        apply_sc(ComShc, 'Max', '3-Phase', 'All')
         ComShc.Execute()
     """
-    config = create_short_circuit_config(bound, f_type)
+    config = create_short_circuit_config(bound, f_type, consider_prot, location, relative)
 
     for attr_name, attr_value in config.as_dict().items():
         comshc.SetAttribute(attr_name, attr_value)

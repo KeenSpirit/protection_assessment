@@ -1,50 +1,12 @@
 import math
-import logging
 import pandas as pd
 from devices import relays
-
-def rewrite_results(app, lines, fault_type):
-    """
-
-    :param app:
-    :param lines:
-    :param fault_type:
-    :return:
-    """
-    # Based on the selected folder create a list of available matrices
-    app.SetGraphicUpdate(0)
-    for line in lines:
-        if fault_type == '2-Phase':
-            line_energy = line.ph_energy
-            dpl_num = "dpl1"
-        else:
-            line_energy = line.pg_energy
-            dpl_num = "dpl2"
-        try:
-            line_type = line.obj.typ_id
-            if fault_type == '2-Phase' and 'SWER' in line_type.loc_name:
-                line.obj.SetAttribute(f"e:{dpl_num}", 3)
-                continue
-        except AttributeError:
-            pass
-        try:
-            allowable_energy = line.thermal_rating ** 2 * 1
-            if line_energy < allowable_energy:
-                # No conductor damage
-                line.obj.SetAttribute(f"e:{dpl_num}", 2)
-            elif line_energy > allowable_energy:
-                # Conductor damage
-                line.obj.SetAttribute(f"e:{dpl_num}", 1)
-        except Exception:
-            # No data
-            line.obj.SetAttribute(f"e:{dpl_num}", 0)
-            logging.exception(f"{line.obj.loc_name} No data")
-            logging.info(line.__dict__)
-
+from importlib import reload
+reload(relays)
 
 def cond_damage_results(devices):
     """
-
+    For saving to Excel file
     :param devices:
     :return:
     """
