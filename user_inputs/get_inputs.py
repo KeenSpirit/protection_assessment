@@ -1,7 +1,7 @@
 from tkinter import *  # noqa [F403]
 import sys
 from pf_config import pft
-import script_classes as dd
+from domain.enums import ElementType
 import tkinter as tk
 from tkinter import ttk
 import sys
@@ -488,7 +488,7 @@ class FaultLevelStudy:
             fdr_sw_locname = {feeder: [] for feeder in feeders_switches}
             for feeder, switches in feeders_switches.items():
                 for switch in switches:
-                    if switch.GetClassName() == dd.ElementType.FEEDER.value:
+                    if switch.GetClassName() == ElementType.FEEDER.value:
                         cubicle = switch.obj_id
                     else:
                         cubicle = switch.fold_id

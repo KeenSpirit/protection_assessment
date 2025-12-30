@@ -2,7 +2,8 @@ import sys
 from pf_config import pft
 from typing import List, Dict
 from fdr_open_points import fdr_open_user_input as foui
-import script_classes as dd
+from domain.enums import ElementType
+from domain import feeder as fdr
 from importlib import reload
 reload(foui)
 
@@ -15,12 +16,12 @@ def main(app: pft.Application):
     feeder_list = foui.get_feeders(app, radial_dic)
     for fdr in feeder_list:
         feeder = app.GetCalcRelevantObjects(fdr + ".ElmFeeder")[0]
-        feeder = dd.initialise_fdr_dataclass(feeder)
+        feeder = fdr.initialise_fdr_dataclass(feeder)
         get_open_points(app, feeder)
         app.PrintPlain(f"Feeder {feeder.obj} open points:")
         if feeder.open_points:
             for site, switch in feeder.open_points.items():
-                if switch.GetClassName() == dd.ElementType.SWITCH.value:
+                if switch.GetClassName() == ElementType.SWITCH.value:
                     app.PrintPlain(f"\t{switch}")
                 else:
                     app.PrintPlain(f"\t{site} / {switch}")
@@ -31,7 +32,7 @@ def main(app: pft.Application):
                    "project")
 
 
-def get_open_points(app:pft.Application, feeder: dd.Feeder):
+def get_open_points(app:pft.Application, feeder: fdr.Feeder):
 
     all_staswitch = app.GetProjectFolder("netdat").GetContents("*.StaSwitch", 1)
     all_elmcoup = app.GetProjectFolder("netdat").GetContents("*.ElmCoup", 1)

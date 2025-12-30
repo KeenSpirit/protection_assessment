@@ -130,7 +130,8 @@ class ShortCircuitConfig:
             result['i_pspgf'] = self.i_pspgf
         elif self.iopt_cur == CalculationBound.MINIMUM.value:
             # i_p2psc only for minimum 3-phase and 2-phase faults
-            if self.iopt_shc in (FaultType.THREE_PHASE.value, FaultType.TWO_PHASE.value):
+            if self.iopt_shc in (
+                    FaultType.THREE_PHASE.value, FaultType.TWO_PHASE.value):
                 result['i_p2psc'] = self.i_p2psc
         if self.iopt_allbus == FaultLocation.USER_SELECTION.value:
             result['iopt_dfr'] = self.iopt_dfr
@@ -144,7 +145,10 @@ class ShortCircuitConfig:
 # FACTORY FUNCTION TO CREATE CONFIGURATIONS
 # =============================================================================
 
-def create_short_circuit_config(bound: str, fault_type: str, consider_prot: str, location: Optional[pft.ElmLne] = None, relative: int = 0) -> ShortCircuitConfig:
+def create_short_circuit_config(
+        bound: str, fault_type: str, consider_prot: str,
+        location: Optional[pft.ElmLne] = None, relative: int = 0
+        ) -> ShortCircuitConfig:
     """
     Factory function to create short-circuit study configurations.
 
@@ -216,7 +220,8 @@ def create_short_circuit_config(bound: str, fault_type: str, consider_prot: str,
 # APPLY FUNCTION
 # =============================================================================
 
-def apply_sc(comshc: pft.ComShc, bound: str, f_type: str, consider_prot: str, location: Optional[pft.ElmTerm] = None, relative: int = 0) -> None:
+def apply_sc(comshc: pft.ComShc, bound: str, f_type: str, consider_prot: str,
+             location: Optional[pft.ElmTerm] = None, relative: int = 0) -> None:
     """
     Configure PowerFactory short-circuit command with study parameters.
 
@@ -233,7 +238,8 @@ def apply_sc(comshc: pft.ComShc, bound: str, f_type: str, consider_prot: str, lo
         apply_sc(ComShc, 'Max', '3-Phase', 'All')
         ComShc.Execute()
     """
-    config = create_short_circuit_config(bound, f_type, consider_prot, location, relative)
+    config = create_short_circuit_config(
+        bound, f_type, consider_prot, location, relative)
 
     for attr_name, attr_value in config.as_dict().items():
         comshc.SetAttribute(attr_name, attr_value)

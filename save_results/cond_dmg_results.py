@@ -1,6 +1,6 @@
 import math
 import pandas as pd
-from devices import relays
+from relays import reclose
 from importlib import reload
 reload(relays)
 
@@ -42,7 +42,7 @@ def cond_damage_results(devices):
 
     line_list = []
     for device in devices:
-        trips = relays.get_device_trips(device.obj)
+        trips = reclose.get_device_trips(device.obj)
         list_length = len(device.sect_lines)
         line_df = pd.DataFrame({
             "Device":

@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 import sys
 from pf_config import pft
 from fault_study import fault_impedance
-from devices import relays
+from relays.reach_factors import device_reach_factors
 from save_results import cond_dmg_results as cd
 from importlib import reload
 import re
@@ -433,7 +433,7 @@ def format_detailed_results(app, region, devices):
     """
     dfls_list = []
     for device in devices:
-        device_reach_factors = relays.device_reach_factors(region, device, device.sect_terms)
+        device_reach_factors = device_reach_factors(region, device, device.sect_terms)
 
         # Safely extract device name and terms
         device_name = str(device.obj.loc_name) if device.obj is not None else 'Unknown Device'
@@ -453,9 +453,13 @@ def format_detailed_results(app, region, devices):
             'Max PG fault': [safe_numeric(getattr(term, 'max_fl_pg', 0)) for term in sect_terms],
             'Min 3P fault': [safe_numeric(getattr(term, 'min_fl_3ph', 0)) for term in sect_terms],
             'Min 2P fault': [safe_numeric(getattr(term, 'min_fl_2ph', 0)) for term in sect_terms],
-            'Min PG fault': [safe_numeric(fault_impedance.term_pg_fl(region, term)) for term in sect_terms],
-            'Min Sys Norm 2P fault': [safe_numeric(getattr(term, 'min_fl_3ph', 0)) for term in sect_terms],
-            'Min Sys NormPG fault': [safe_numeric(fault_impedance.term_sn_pg_fl(region, term)) for term in sect_terms],
+            'Min PG fault': [safe_numeric(
+                fault_impedance.get_terminal_pg_fault(region, term)) for term in sect_terms],
+            'Min Sys Norm 2P fault':
+                [safe_numeric(getattr(term, 'min_fl_3ph', 0)) for term in sect_terms],
+            'Min Sys NormPG fault': [safe_numeric(
+                fault_impedance.get_terminal_pg_fault(
+                    region, term, system_normal=True)) for term in sect_terms],
             # PICKUPS
             'EF PRI PU': device_reach_factors.get('ef_pickup', []),
             'EF BU PU': device_reach_factors.get('bu_ef_pickup', []),
@@ -487,8 +491,10 @@ def format_detailed_results(app, region, devices):
 
         # Safely handle transformer data - keep as numeric
         try:
-            tr_dict = {str(load.term.loc_name): safe_numeric(load.load_kva) for load in device.sect_loads if
-                       hasattr(load, 'term') and hasattr(load, 'load_kva')}
+            tr_dict = {
+                str(load.term.loc_name): safe_numeric(load.load_kva) for load in device.sect_loads
+                    if hasattr(load, 'term') and hasattr(load, 'load_kva')
+            }
             df_sorted['Tfmr Size (kVA)'] = df_sorted[device_name].map(tr_dict)
         except AttributeError:
             # If mapping fails, leave the column with NaN values

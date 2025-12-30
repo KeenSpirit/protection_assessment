@@ -1,6 +1,8 @@
 import math
-from devices import relays
-import script_classes as dd
+from relays import reclose
+from relays import elements
+from relays import current_conversion
+from domain.enums import ElementType
 import logging
 
 from importlib import reload
@@ -13,20 +15,20 @@ def cond_damage(app, feeder, devices):
     for device in devices:
         dev_obj = device.obj
         lines = device.sect_lines
-        total_trips = relays.get_device_trips(dev_obj)
+        total_trips = rec.get_device_trips(dev_obj)
         fault_type = '2-Phase'
         app.PrintPlain(f"Performing phase fault conductor damage assessment for {dev_obj.loc_name}...")
         for line in lines:
-            relays.reset_reclosing(dev_obj)
+            rec.reset_reclosing(dev_obj)
             trip_count = 1
             total_energy = 0
             while trip_count <= total_trips:
-                block_service_status = relays.set_enabled_elements(dev_obj)
+                block_service_status = rec.set_enabled_elements(dev_obj)
                 min_fl_clear_times, _ = fault_clear_times(app, device, line, fl_step, fault_type)
                 max_energy, max_fl, max_clear_time = worst_case_energy(line, min_fl_clear_times, fault_type, device,
                                                                        False)
-                relays.reset_block_service_status(block_service_status)
-                trip_count  = relays.trip_count(dev_obj, increment=True)
+                rec.reset_block_service_status(block_service_status)
+                trip_count  = rec.trip_count(dev_obj, increment=True)
                 total_energy += max_energy
                 if max_clear_time is not None:
                     line.ph_clear_time = max_clear_time
@@ -39,19 +41,19 @@ def cond_damage(app, feeder, devices):
         line_fault_type = 'Phase-Ground'
         app.PrintPlain(f"Performing earth fault conductor damage assessment for {dev_obj.loc_name}...")
         for line in lines:
-            relays.reset_reclosing(dev_obj)
+            rec.reset_reclosing(dev_obj)
             trip_count = 1
             total_energy = 0
             while trip_count <= total_trips:
-                block_service_status = relays.set_enabled_elements(dev_obj)
+                block_service_status = rec.set_enabled_elements(dev_obj)
                 min_fl_clear_times, device_fault_type = fault_clear_times(app, device, line, fl_step, line_fault_type)
                 transposition = False
                 if line_fault_type != device_fault_type:
                     transposition = True
                 max_energy, max_fl, max_clear_time = worst_case_energy(line, min_fl_clear_times, fault_type, device,
                                                                        transposition)
-                relays.reset_block_service_status(block_service_status)
-                trip_count  = relays.trip_count(dev_obj, increment=True)
+                rec.reset_block_service_status(block_service_status)
+                trip_count  = rec.trip_count(dev_obj, increment=True)
                 total_energy += max_energy
                 if max_clear_time is not None:
                     line.pg_clear_time = max_clear_time
@@ -95,11 +97,11 @@ def fault_clear_times(app, device, line, fl_step, fault_type):
 
     # Select only the elements capable of detecting the fault type
     # and enabled for the current auto-reclose iteration
-    if device_obj.GetClassName() == dd.ElementType.FUSE.value:
+    if device_obj.GetClassName() == ElementType.FUSE.value:
         active_elements = [device_obj]
     else:
-        elements = relays.get_prot_elements(device_obj)
-        active_elements = relays.get_active_elements(elements, fault_type)
+        elements = elements.get_prot_elements(device_obj)
+        active_elements = elements.get_active_elements(elements, fault_type)
         # hisets = [
         #     element.GetAttribute("e:cpIpset") - 1 for element in active_elements
         #           if element.GetClassName() == 'RelIoc']
@@ -110,11 +112,11 @@ def fault_clear_times(app, device, line, fl_step, fault_type):
     for element in active_elements:
         for fault_level in fl_interval_1:
             # Calculate protection operate time for element and fl
-            if element.GetClassName() == dd.ElementType.FUSE.value:
+            if element.GetClassName() == ElementType.FUSE.value:
                 operate_time = fuse_clear_time(element, fault_level)
                 switch_operate_time = 0
             else:
-                element_current = relays.get_measured_current(
+                element_current = current_conversion.get_measured_current(
                     element, fault_level, fault_type)
                 operate_time = element_trip_time(element, element_current)
                 switch_operate_time = 0.08

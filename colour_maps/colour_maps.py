@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from powerfactory import Application, DataObject
 
-from devices import relays
+from relays.reach_factors import device_reach_factors
 
 
 # =============================================================================

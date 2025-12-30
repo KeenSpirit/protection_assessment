@@ -8,11 +8,11 @@ import model_checks
 from fault_study import fault_level_study as fs, fault_level_study as tm
 from fdr_open_points import get_open_points as gop
 from find_substation import find_sub
-import script_classes as dd
+import domain as dd
 from user_inputs import get_inputs as gi, study_selection as ss
 from legacy_script import script_bridge as sb
 from oc_plots import plot_relays as pr, get_rmu_fuses as grf
-from devices import fuses as ds, relays
+from relays import elements
 from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 import logging.config
@@ -26,8 +26,7 @@ reload(gi)
 reload(gop)
 reload(fs)
 reload(pr)
-reload(ds)
-reload(relays)
+reload(elements)
 reload(cd)
 reload(tm)
 reload(sr)
@@ -62,7 +61,7 @@ def main(app: pft.Application):
         return
 
     # Undertake model checks
-    all_relays = relays.get_all_relays(app)
+    all_relays = elements.get_all_relays(app)
     model_checks.relay_checks(app, all_relays)
 
     region = helper.obtain_region(app)

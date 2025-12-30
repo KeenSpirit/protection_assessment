@@ -5,7 +5,7 @@ from pf_config import pft
 from devices import fuses as ds
 from oc_plots import get_rmu_fuses as grf
 from pf_protection_helper import create_obj, obtain_region
-import script_classes as dd
+import domain as dd
 from typing import List, Dict, Union
 from importlib import reload
 

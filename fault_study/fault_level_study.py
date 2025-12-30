@@ -16,7 +16,7 @@ from typing import List, Dict, Union
 from pf_config import pft
 import pf_protection_helper as helper
 from fault_study import analysis, fault_impedance, floating_terminals as ft
-import script_classes as dd
+import domain as dd
 from importlib import reload
 
 reload(analysis)
@@ -392,10 +392,10 @@ def update_device_data(region: str, devices: List[dd.Device]):
         device.min_fl_3ph = _safe_min([term.min_fl_3ph for term in device.sect_terms if term.min_fl_3ph > 0])
         device.min_fl_2ph = _safe_min([term.min_fl_2ph for term in device.sect_terms if term.min_fl_2ph > 0])
         device.min_fl_pg = (
-            _safe_min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.min_fl_pg > 0]))
+            _safe_min([fault_impedance.get_terminal_pg_fault(region, term) for term in device.sect_terms if term.min_fl_pg > 0]))
         device.min_sn_fl_2ph = _safe_min([term.min_sn_fl_2ph for term in device.sect_terms if term.min_sn_fl_2ph > 0])
         device.min_sn_fl_pg = (
-            _safe_min([fault_impedance.term_sn_pg_fl(region, term) for term in device.sect_terms if term.min_sn_fl_pg > 0]))
+            _safe_min([fault_impedance.get_terminal_pg_fault(region, term, system_normal=True) for term in device.sect_terms if term.min_sn_fl_pg > 0]))
         device.sect_terms = sorted(device.sect_terms, key=lambda term: term.min_fl_pg, reverse=True)
 
 
@@ -448,14 +448,14 @@ def update_line_data(app: pft.Application, region: str, devices: List[dd.Device]
                         app.PrintPlain(line.obj)
                         app.PrintPlain(f"max_lne_cub: {max_lne_cub}")
                         app.PrintPlain(f"line_ds_terms: {line_ds_terms}")
-                    line.min_fl_pg = min([fault_impedance.term_pg_fl(region, term) for term in device.sect_terms if term.obj in line_ds_terms])
-                    line.min_sn_fl_pg = min([fault_impedance.term_sn_pg_fl(region, term) for term in device.sect_terms if term.obj in line_ds_terms])
+                    line.min_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term) for term in device.sect_terms if term.obj in line_ds_terms])
+                    line.min_sn_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term, system_normal=True) for term in device.sect_terms if term.obj in line_ds_terms])
                 else:
                     line.min_fl_3ph = min([term.min_fl_3ph for term in line_terms])
                     line.min_fl_2ph = min([term.min_fl_2ph for term in line_terms])
                     line.min_sn_fl_2ph = min([term.min_sn_fl_2ph for term in line_terms])
-                    line.min_fl_pg = min([fault_impedance.term_pg_fl(region, term) for term in line_terms])
-                    line.min_sn_fl_pg = min([fault_impedance.term_sn_pg_fl(region, term) for term in line_terms])
+                    line.min_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term) for term in line_terms])
+                    line.min_sn_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term, system_normal=True) for term in line_terms])
             else:
                 line.max_fl_3ph = 0
                 line.max_fl_2ph = 0

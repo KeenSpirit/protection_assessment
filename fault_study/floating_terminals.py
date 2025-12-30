@@ -1,7 +1,7 @@
 import sys
 from typing import List, Dict, Union
 from pf_config import pft
-import script_classes as dd
+import domain as dd
 
 
 def get_floating_terminals(feeder: dd.Feeder, devices: List[dd.Device]) -> Dict:
