@@ -5,30 +5,27 @@ from relays import current_conversion
 from domain.enums import ElementType
 import logging
 
-from importlib import reload
-reload(relays)
 
-
-def cond_damage(app, feeder, devices):
+def cond_damage(app, devices):
 
     fl_step = 10
     for device in devices:
         dev_obj = device.obj
         lines = device.sect_lines
-        total_trips = rec.get_device_trips(dev_obj)
+        total_trips = reclose.get_device_trips(dev_obj)
         fault_type = '2-Phase'
         app.PrintPlain(f"Performing phase fault conductor damage assessment for {dev_obj.loc_name}...")
         for line in lines:
-            rec.reset_reclosing(dev_obj)
+            reclose.reset_reclosing(dev_obj)
             trip_count = 1
             total_energy = 0
             while trip_count <= total_trips:
-                block_service_status = rec.set_enabled_elements(dev_obj)
+                block_service_status = reclose.set_enabled_elements(dev_obj)
                 min_fl_clear_times, _ = fault_clear_times(app, device, line, fl_step, fault_type)
                 max_energy, max_fl, max_clear_time = worst_case_energy(line, min_fl_clear_times, fault_type, device,
                                                                        False)
-                rec.reset_block_service_status(block_service_status)
-                trip_count  = rec.trip_count(dev_obj, increment=True)
+                reclose.reset_block_service_status(block_service_status)
+                trip_count  = reclose.trip_count(dev_obj, increment=True)
                 total_energy += max_energy
                 if max_clear_time is not None:
                     line.ph_clear_time = max_clear_time
@@ -41,19 +38,19 @@ def cond_damage(app, feeder, devices):
         line_fault_type = 'Phase-Ground'
         app.PrintPlain(f"Performing earth fault conductor damage assessment for {dev_obj.loc_name}...")
         for line in lines:
-            rec.reset_reclosing(dev_obj)
+            reclose.reset_reclosing(dev_obj)
             trip_count = 1
             total_energy = 0
             while trip_count <= total_trips:
-                block_service_status = rec.set_enabled_elements(dev_obj)
+                block_service_status = reclose.set_enabled_elements(dev_obj)
                 min_fl_clear_times, device_fault_type = fault_clear_times(app, device, line, fl_step, line_fault_type)
                 transposition = False
                 if line_fault_type != device_fault_type:
                     transposition = True
                 max_energy, max_fl, max_clear_time = worst_case_energy(line, min_fl_clear_times, fault_type, device,
                                                                        transposition)
-                rec.reset_block_service_status(block_service_status)
-                trip_count  = rec.trip_count(dev_obj, increment=True)
+                reclose.reset_block_service_status(block_service_status)
+                trip_count  = reclose.trip_count(dev_obj, increment=True)
                 total_energy += max_energy
                 if max_clear_time is not None:
                     line.pg_clear_time = max_clear_time
@@ -100,8 +97,8 @@ def fault_clear_times(app, device, line, fl_step, fault_type):
     if device_obj.GetClassName() == ElementType.FUSE.value:
         active_elements = [device_obj]
     else:
-        elements = elements.get_prot_elements(device_obj)
-        active_elements = elements.get_active_elements(elements, fault_type)
+        all_elements = elements.get_prot_elements(device_obj)
+        active_elements = elements.get_active_elements(all_elements, fault_type)
         # hisets = [
         #     element.GetAttribute("e:cpIpset") - 1 for element in active_elements
         #           if element.GetClassName() == 'RelIoc']

@@ -1,9 +1,7 @@
-from devices import relays
-from importlib import reload
 import functools
 import time
 import logging
-reload(relays)
+
 
 
 

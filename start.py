@@ -68,7 +68,6 @@ def main(app: pft.Application):
     feeders_devices, bu_devices, user_selection, external_grid = gi.get_input(app, region, study_selections)
     feeders = cvrt_fdr_to_dataclass(app, feeders_devices, bu_devices)
 
-
     # Turn on all grids momentarily to load all floating terminals in to line connected elements
     user_selected_study_case = app.GetActiveStudyCase()
     switch_study_case(app, user_selected_study_case, all_grids=True)
@@ -80,7 +79,7 @@ def main(app: pft.Application):
         if user_selection:
             selected_devices = [device for device in feeder.devices if device.obj in user_selection[feeder.obj.loc_name]]
             if 'Conductor Damage Assessment' in study_selections:
-                cd.cond_damage(app, feeder.obj.loc_name, selected_devices)
+                cd.cond_damage(app, selected_devices)
             if 'Protection Relay Coordination Plot' in study_selections:
                 pr.plot_all_relays(app, feeder, selected_devices)
     if "Fault Level Study (legacy)" in study_selections:

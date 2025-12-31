@@ -1,8 +1,6 @@
 import math
 import pandas as pd
 from relays import reclose
-from importlib import reload
-reload(relays)
 
 def cond_damage_results(devices):
     """

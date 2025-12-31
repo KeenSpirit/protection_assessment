@@ -1,7 +1,8 @@
 from tkinter import *  # noqa [F403]
-import sys
 from pf_config import pft
 from domain.enums import ElementType
+from devices import fuses
+from relays import elements
 import tkinter as tk
 from tkinter import ttk
 import sys
@@ -392,10 +393,9 @@ class FaultLevelStudy:
     def get_feeders_devices(self, radial_list: List[str]) -> Tuple[Dict[str,list],Dict[Any,list]]:
         """Get active relays and fuses.
         Map them to corresponding external grid or feeder using a dictionary"""
-        from devices import fuses, relays
 
         # Filter for relays under network model recursively.
-        all_relays = relays.get_all_relays(self.app)
+        all_relays = elements.get_all_relays(self.app)
         # Create a list of active fuses
         all_fuses = fuses.get_all_fuses(self.app)
         devices = all_relays + all_fuses

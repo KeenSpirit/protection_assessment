@@ -14,7 +14,7 @@ import math
 from typing import Dict, List, Union, TYPE_CHECKING
 
 from domain.enums import ElementType
-from relay.elements import get_prot_elements
+from relays.elements import get_prot_elements
 
 if TYPE_CHECKING:
     from pf_config import pft
@@ -243,7 +243,7 @@ def _calculate_ef_reach_factors(
     for element in elements:
         # Get appropriate fault level based on element type
         if element.obj.GetClassName() == ElementType.TERM.value:
-            element_fl_pg = fault_impedance.get_terminal_pg_fault(region, term)
+            element_fl_pg = fault_impedance.get_terminal_pg_fault(region, element)
         else:
             element_fl_pg = element.min_fl_pg
 
@@ -286,7 +286,7 @@ def _calculate_nps_reach_factors(
     nps_ef_rf = []
     for element in elements:
         if element.obj.GetClassName() == ElementType.TERM.value:
-            element_fl_pg = fault_impedance.get_terminal_pg_fault(region, term)
+            element_fl_pg = fault_impedance.get_terminal_pg_fault(region, element)
         else:
             element_fl_pg = element.min_fl_pg
 
@@ -362,7 +362,7 @@ def _calculate_backup_reach_factors(
         bu_ef_rf = []
         for element in elements:
             if element.obj.GetClassName() == ElementType.TERM.value:
-                element_fl_pg = fault_impedance.get_terminal_pg_fault(region, term)
+                element_fl_pg = fault_impedance.get_terminal_pg_fault(region, element)
             else:
                 element_fl_pg = element.min_fl_pg
 
@@ -388,7 +388,7 @@ def _calculate_backup_reach_factors(
         bu_nps_ef_rf = []
         for element in elements:
             if element.obj.GetClassName() == ElementType.TERM.value:
-                element_fl_pg = fault_impedance.get_terminal_pg_fault(region, term)
+                element_fl_pg = fault_impedance.get_terminal_pg_fault(region, element)
             else:
                 element_fl_pg = element.min_fl_pg
 

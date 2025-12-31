@@ -15,7 +15,6 @@ import re
 import numpy as np
 
 reload(fault_impedance)
-reload(relays)
 reload(cd)
 
 def save_dataframe(app, region, study_selections, external_grid, feeders):
@@ -433,7 +432,7 @@ def format_detailed_results(app, region, devices):
     """
     dfls_list = []
     for device in devices:
-        device_reach_factors = device_reach_factors(region, device, device.sect_terms)
+        dev_reach_factors = device_reach_factors(region, device, device.sect_terms)
 
         # Safely extract device name and terms
         device_name = str(device.obj.loc_name) if device.obj is not None else 'Unknown Device'
@@ -461,21 +460,21 @@ def format_detailed_results(app, region, devices):
                 fault_impedance.get_terminal_pg_fault(
                     region, term, system_normal=True)) for term in sect_terms],
             # PICKUPS
-            'EF PRI PU': device_reach_factors.get('ef_pickup', []),
-            'EF BU PU': device_reach_factors.get('bu_ef_pickup', []),
-            'PH PRI PU': device_reach_factors.get('ph_pickup', []),
-            'PH BU PU': device_reach_factors.get('bu_ph_pickup', []),
-            'NPS PRI PU': device_reach_factors.get('nps_pickup', []),
-            'NPS BU PU': device_reach_factors.get('bu_nps_pickup', []),
+            'EF PRI PU': dev_reach_factors.get('ef_pickup', []),
+            'EF BU PU': dev_reach_factors.get('bu_ef_pickup', []),
+            'PH PRI PU': dev_reach_factors.get('ph_pickup', []),
+            'PH BU PU': dev_reach_factors.get('bu_ph_pickup', []),
+            'NPS PRI PU': dev_reach_factors.get('nps_pickup', []),
+            'NPS BU PU': dev_reach_factors.get('bu_nps_pickup', []),
             # REACH FACTORS
-            'EF PRI RF': device_reach_factors.get('ef_rf', []),
-            'EF BU RF': device_reach_factors.get('bu_ef_rf', []),
-            'PH PRI RF': device_reach_factors.get('ph_rf', []),
-            'PH BU RF': device_reach_factors.get('bu_ph_rf', []),
-            'NPS EF PRI RF': device_reach_factors.get('nps_ef_rf', []),
-            'NPS EF BU RF': device_reach_factors.get('bu_nps_ef_rf', []),
-            'NPS PH PRI RF': device_reach_factors.get('nps_ph_rf', []),
-            'NPS PH BU RF': device_reach_factors.get('bu_nps_ph_rf', [])
+            'EF PRI RF': dev_reach_factors.get('ef_rf', []),
+            'EF BU RF': dev_reach_factors.get('bu_ef_rf', []),
+            'PH PRI RF': dev_reach_factors.get('ph_rf', []),
+            'PH BU RF': dev_reach_factors.get('bu_ph_rf', []),
+            'NPS EF PRI RF': dev_reach_factors.get('nps_ef_rf', []),
+            'NPS EF BU RF': dev_reach_factors.get('bu_nps_ef_rf', []),
+            'NPS PH PRI RF': dev_reach_factors.get('nps_ph_rf', []),
+            'NPS PH BU RF': dev_reach_factors.get('bu_nps_ph_rf', [])
         })
 
         # Sort fault levels by Max PG fault if column exists and has data

@@ -375,7 +375,7 @@ def _process_device(
         device: Protection device object.
         map_types: List of map types to assess.
     """
-    device_reach_factors = relays.device_reach_factors(region, device, device.sect_lines)
+    dev_reach_factors = device_reach_factors(region, device, device.sect_lines)
 
     for i, line in enumerate(device.sect_lines):
         # Create fresh lookup for each line
@@ -392,8 +392,8 @@ def _process_device(
                 continue
 
             reach_factor = max_mixed_values(
-                device_reach_factors[keys[0]][i],
-                device_reach_factors[keys[1]][i]
+                dev_reach_factors[keys[0]][i],
+                dev_reach_factors[keys[1]][i]
             )
             _assess_reach(region, map_type, reach_factor, dpl_lookup)
 
