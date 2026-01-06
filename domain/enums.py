@@ -2,7 +2,16 @@
 Domain enumerations for PowerFactory protection assessment.
 
 This module contains all enumeration types used throughout the protection
-assessment system, plus simple lookup functions with no external dependencies.
+assessment system, plus simple lookup functions with no external
+dependencies.
+
+Enumerations:
+    ElementType: PowerFactory element class names
+    ConstructionType: Line construction types (OH, UG, SWER)
+    FaultType: Fault types for protection analysis
+
+Functions:
+    ph_attr_lookup: Convert PowerFactory phase technology to phase count
 """
 
 from enum import Enum
@@ -10,7 +19,13 @@ from typing import Optional
 
 
 class ElementType(Enum):
-    """PowerFactory element class names."""
+    """
+    PowerFactory element class names.
+
+    Used for type checking when traversing the network model and
+    identifying element types from GetClassName() results.
+    """
+
     TERM = "ElmTerm"
     LOAD = "ElmLod"
     TFMR = "ElmTr2"
@@ -24,14 +39,29 @@ class ElementType(Enum):
 
 
 class ConstructionType(Enum):
-    """Line construction types affecting fault impedance calculations."""
+    """
+    Line construction types affecting fault impedance calculations.
+
+    Different construction types have different fault resistance
+    assumptions in regional models:
+        - OH (Overhead): 50 ohm fault resistance
+        - UG (Underground): 10 ohm fault resistance
+        - SWER: Single Wire Earth Return, special handling
+    """
+
     OVERHEAD = "OH"
     UNDERGROUND = "UG"
     SWER = "SWER"
 
 
 class FaultType(Enum):
-    """Types of faults for protection analysis."""
+    """
+    Types of faults for protection analysis.
+
+    These values correspond to the fault type strings used in
+    short-circuit study configuration.
+    """
+
     THREE_PHASE = "3-Phase"
     TWO_PHASE = "2-Phase"
     PHASE_GROUND = "Phase-Ground"
@@ -56,10 +86,11 @@ def ph_attr_lookup(phtech: int) -> Optional[int]:
 
     Args:
         phtech: The phtech attribute value from an ElmTerm object.
-                Values 0-8 represent different phase configurations.
+            Values 0-8 represent different phase configurations.
 
     Returns:
-        Number of phases (1, 2, or 3), or None if phtech is not recognized.
+        Number of phases (1, 2, or 3), or None if phtech is not
+        recognized.
 
     Example:
         >>> ph_attr_lookup(0)  # 3-phase ABC

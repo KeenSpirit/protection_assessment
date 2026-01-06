@@ -1,19 +1,20 @@
 """
 Fault impedance and construction type handling.
 
-This module determines appropriate fault current values based on:
-- Network region (SEQ vs Regional)
-- Line construction type (overhead vs underground vs SWER)
-- Study type (minimum vs system normal minimum)
+This module determines appropriate fault current values based on network
+region, line construction type, and study type. Different regions use
+different fault impedance assumptions for earth faults:
 
-The key insight is that different regions use different fault impedance
-assumptions for earth faults:
 - SEQ: Uses a single fault impedance value (0 ohms)
-- Regional: Uses construction-dependent values (50Ω for OH, 10Ω for UG)
+- Regional: Uses construction-dependent values (50Ω OH, 10Ω UG)
+
+Functions:
+    update_node_construction: Set construction type for all terminals
+    get_terminal_pg_fault: Get appropriate PG fault current for terminal
 """
 
-import sys
-from typing import List, Union
+from typing import List
+
 from pf_config import pft
 import domain as dd
 
@@ -24,19 +25,29 @@ def update_node_construction(devices: List[dd.Device]) -> None:
 
     Examines connected line elements to determine if each terminal is
     connected to overhead (OH), underground (UG), or SWER construction.
+    This information is used to select appropriate fault impedance values.
 
     Args:
-        devices: List of Device dataclasses with sect_terms populated
+        devices: List of Device dataclasses with sect_terms populated.
 
     Side Effects:
         Sets the 'constr' attribute on each Termination in device.sect_terms
+        to one of: 'OH', 'UG', or 'SWER'.
     """
     all_nodes = _get_all_terms(devices)
     _update_construction(all_nodes)
 
 
 def _get_all_terms(devices: List[dd.Device]) -> List[dd.Termination]:
-    """Extract all terminations from device list."""
+    """
+    Extract all terminations from device list.
+
+    Args:
+        devices: List of Device dataclasses.
+
+    Returns:
+        Flat list of all Termination objects from all devices.
+    """
     all_nodes = []
     for device in devices:
         terms = device.sect_terms
@@ -48,7 +59,14 @@ def _update_construction(all_nodes: List[dd.Termination]) -> None:
     """
     Set construction type for each node based on connected lines.
 
-    Priority: SWER > UG > OH (default)
+    Examines lines connected to each terminal and sets the construction
+    type. Priority order: SWER > UG > OH (default).
+
+    Args:
+        all_nodes: List of Termination dataclasses to update.
+
+    Side Effects:
+        Sets constr attribute on each Termination.
     """
     for node in all_nodes:
         # Skip if already determined
@@ -56,9 +74,11 @@ def _update_construction(all_nodes: List[dd.Termination]) -> None:
             continue
 
         # Get all lines connected to the node
-        line_elements = [ele for ele in node.obj.GetConnectedElements()
-                         if ele.GetClassName() == dd.ElementType.LINE.value
-                         ]
+        line_elements = [
+            ele for ele in node.obj.GetConnectedElements()
+            if ele.GetClassName() == dd.ElementType.LINE.value
+        ]
+
         # Handle case where upstream connection is not a line (e.g., ElmCoup)
         if not line_elements:
             try:
@@ -91,23 +111,23 @@ def _update_construction(all_nodes: List[dd.Termination]) -> None:
             node.constr = "OH"
 
 
-def get_terminal_pg_fault(region: str,
-                          term: dd.Termination,
-                          system_normal: bool = False
-                          ) -> float:
+def get_terminal_pg_fault(
+    region: str,
+    term: dd.Termination,
+    system_normal: bool = False
+) -> float:
     """
     Get the appropriate minimum phase-ground fault current for a terminal.
 
-    Selects the correct fault current value based on:
-    - Region: SEQ uses single impedance; Regional uses construction-dependent
-    - Construction: Overhead (50Ω) vs Underground (10Ω) for Regional
-    - Study type: Normal minimum vs System Normal minimum
+    Selects the correct fault current value based on region, construction
+    type, and study type. This accounts for different fault impedance
+    assumptions used in different network regions.
 
     Args:
-        region: Network region identifier ('SEQ' or 'Regional Models')
-        term: Termination dataclass with fault current attributes
+        region: Network region identifier ('SEQ' or 'Regional Models').
+        term: Termination dataclass with fault current attributes.
         system_normal: If True, returns system normal minimum values.
-                       If False (default), returns minimum values.
+            If False (default), returns minimum values.
 
     Returns:
         Minimum phase-ground fault current in Amperes.
@@ -129,7 +149,7 @@ def get_terminal_pg_fault(region: str,
         >>> min_fl = get_terminal_pg_fault('SEQ', terminal)
         >>>
         >>> # Get system normal minimum for reporting
-        >>> sn_min_fl = get_terminal_pg_fault('SEQ', terminal, system_normal=True)
+        >>> sn_min_fl = get_terminal_pg_fault('SEQ', terminal, True)
     """
     if region == 'SEQ':
         # SEQ: Single fault impedance value (0 ohms)

@@ -3,6 +3,12 @@ Feeder domain model for protection assessment.
 
 A feeder represents a distribution circuit originating from a substation,
 containing protection devices, network topology, and operating parameters.
+
+Classes:
+    Feeder: Distribution feeder dataclass
+
+Functions:
+    initialise_fdr_dataclass: Create Feeder from PowerFactory ElmFeeder
 """
 
 from dataclasses import dataclass, field
@@ -17,19 +23,20 @@ class Feeder:
     """
     Represents a distribution feeder and its associated protection devices.
 
-    The Feeder is the top-level container for protection assessment, holding
-    references to all devices, network topology, and study results.
+    The Feeder is the top-level container for protection assessment,
+    holding references to all devices, network topology, and study
+    results.
 
-    Attributes:
-        obj: The PowerFactory ElmFeeder object
-        cubicle: The feeder's source cubicle (connection point)
-        term: The source terminal at the substation
-        sys_volts: System nominal voltage in kV
+    Core Attributes:
+        obj: The PowerFactory ElmFeeder object.
+        cubicle: The feeder's source cubicle (connection point).
+        term: The source terminal at the substation.
+        sys_volts: System nominal voltage in kV.
 
     Populated During Analysis:
-        devices: List of protection Device objects on this feeder
-        bu_devices: Dictionary of backup devices by grid
-        open_points: Network open points (normally open switches)
+        devices: List of protection Device objects on this feeder.
+        bu_devices: Dictionary of backup devices by grid.
+        open_points: Network open points (normally open switches).
 
     Example:
         >>> feeder = initialise_fdr_dataclass(elm_feeder)
@@ -37,6 +44,7 @@ class Feeder:
         >>> for device in feeder.devices:
         ...     print(f"  Device: {device.obj.loc_name}")
     """
+
     # Core identification - set at initialization
     obj: "pft.ElmFeeder"
     cubicle: "pft.StaCubic"
@@ -53,11 +61,12 @@ def initialise_fdr_dataclass(element: "pft.ElmFeeder") -> Feeder:
     """
     Initialize a Feeder dataclass from a PowerFactory ElmFeeder object.
 
-    Extracts the essential feeder information from the PowerFactory object
-    and creates a domain model instance for use in protection assessment.
+    Extracts the essential feeder information from the PowerFactory
+    object and creates a domain model instance for use in protection
+    assessment.
 
     Args:
-        element: The PowerFactory ElmFeeder object
+        element: The PowerFactory ElmFeeder object.
 
     Returns:
         Initialized Feeder dataclass with core attributes set.

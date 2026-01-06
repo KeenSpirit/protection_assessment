@@ -1,21 +1,37 @@
 """
-Performs comprehensive fault level analysis for PowerFactory distribution networks.
+Comprehensive fault level analysis for PowerFactory distribution networks.
 
-Main workflow:
-1. Build device hierarchy and downstream objects
-2. Run short-circuit stuides (max/min, 3ph/2ph, ground)
+This module orchestrates the complete fault study workflow:
+1. Build device hierarchy and identify downstream objects
+2. Run short-circuit studies (max/min, 3ph/2ph/ground)
 3. Extract fault currents for terminals and lines
 4. Handle floating terminals at network endpoints
-5. Update device protection settings
+5. Update device protection settings with results
 
+The main entry point is the fault_study() function which coordinates
+all analysis steps for a feeder.
+
+Functions:
+    fault_study: Main orchestration function for fault analysis
+    get_downstream_objects: Populate device downstream components
+    us_ds_device: Establish upstream/downstream device relationships
+    get_ds_capacity: Calculate downstream transformer capacity
+    get_device_sections: Partition network into protection sections
+    terminal_fls: Extract terminal fault currents from study results
+    append_floating_terms: Handle floating terminal fault calculations
+    grid_equivalance_check: Check if min equals system normal min
+    reset_min_source_imp: Toggle external grid impedance values
+    copy_min_fls: Copy min fault levels to system normal fields
+    update_device_data: Populate device fault current summaries
+    update_line_data: Populate line fault current data
 """
 
-import sys
-
 from typing import List, Dict, Union
+
 from pf_config import pft
 import pf_protection_helper as helper
-from fault_study import analysis, study_templates, fault_impedance, floating_terminals as ft
+from fault_study import analysis, study_templates, fault_impedance
+from fault_study import floating_terminals as ft
 import domain as dd
 from importlib import reload
 
@@ -25,39 +41,66 @@ reload(dd)
 reload(fault_impedance)
 
 
-def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: dd.Feeder, study_selections: List[str]):
+def fault_study(
+    app: pft.Application,
+    external_grid: Dict,
+    region: str,
+    feeder: dd.Feeder,
+    study_selections: List[str]
+) -> None:
     """
+    Perform comprehensive fault level analysis for a feeder.
 
-    :param app:
-    :param external_grid:
-    :param region:
-    :param feeder:
-    :return:
+    Orchestrates the complete fault study workflow including topology
+    analysis, short-circuit calculations, and result extraction.
+
+    Args:
+        app: PowerFactory application instance.
+        external_grid: Dictionary of external grid objects and parameters.
+        region: Network region ('SEQ' or 'Regional Models').
+        feeder: Feeder dataclass to analyze.
+        study_selections: List of selected study types.
+
+    Side Effects:
+        Populates fault current data on all Device, Termination, and Line
+        dataclasses within the feeder structure.
+
+    Study Configurations:
+        Maximum studies: 3-Phase, 2-Phase, Ground
+        Minimum studies: 3-Phase, 2-Phase, Ground, Ground Z10, Ground Z50
+        System normal minimum: 2-Phase, Ground, Ground Z10, Ground Z50
     """
-
     app.PrintPlain(f"Performing fault level study for {feeder.obj.loc_name}...")
+
+    # Build device topology
     get_downstream_objects(app, feeder.devices)
     us_ds_device(feeder.devices, feeder.bu_devices)
     get_ds_capacity(feeder.devices)
     get_device_sections(feeder.devices)
 
+    # Define study configurations
     study_configs = [
         ('Max', 'Ground'), ('Max', '3-Phase'), ('Max', '2-Phase'),
         ('Min', 'Ground'), ('Min', '3-Phase'), ('Min', '2-Phase'),
         ('Min', 'Ground Z10'), ('Min', 'Ground Z50'),
     ]
     sn_study_configs = [
-        ('Min', '2-Phase'), ('Min', 'Ground'), ('Min', 'Ground Z10'),
-        ('Min', 'Ground Z50'),
+        ('Min', '2-Phase'), ('Min', 'Ground'),
+        ('Min', 'Ground Z10'), ('Min', 'Ground Z50'),
     ]
 
+    # Determine protection consideration mode
     if "Fault Level Study (all relays configured in model)" in study_selections:
         consider_prot = 'All'
     else:
         consider_prot = 'None'
+
+    # Execute main fault studies
     for bound, fault_type in study_configs:
         analysis.short_circuit(app, bound, fault_type, consider_prot)
         terminal_fls(feeder.devices, bound=bound, f_type=fault_type)
+
+    # Handle system normal minimum studies
     if grid_equivalance_check(external_grid):
         copy_min_fls(feeder.devices)
     else:
@@ -67,250 +110,402 @@ def fault_study(app: pft.Application, external_grid: Dict, region: str, feeder: 
             terminal_fls(feeder.devices, bound='SN_Min', f_type=fault_type)
         reset_min_source_imp(external_grid, sys_norm_min=False)
 
+    # Determine construction types for fault impedance selection
     fault_impedance.update_node_construction(feeder.devices)
 
+    # Handle floating terminals
     floating_terms = ft.get_floating_terminals(feeder.obj, feeder.devices)
-    append_floating_terms(app, external_grid, feeder.devices, floating_terms, consider_prot)
+    append_floating_terms(
+        app, external_grid, feeder.devices, floating_terms, consider_prot
+    )
+
+    # Update device and line data with results
     update_device_data(region, feeder.devices)
     update_line_data(app, region, feeder.devices)
+
+    # Populate immutable fault current containers
     for device in feeder.devices:
         for terminal in device.sect_terms:
             dd.populate_fault_currents(terminal)
 
 
-def get_downstream_objects(app: pft.Application, devices: List):
+def get_downstream_objects(
+    app: pft.Application,
+    devices: List[dd.Device]
+) -> None:
     """
-    Populates device objects with their downstream network components.
+    Populate device objects with their downstream network components.
 
-    Traverses the network topology from each device to identify:
-    - Terminals (elmterm) with voltage > 1kV
-    - Distribution loads (elmlod) in SEQ region
-    - Transformers (ElmTr2) in Regional models (excluding regulators)
-    - Line segments (elmline)
+    Traverses the network topology from each device to identify
+    downstream terminals, loads/transformers, and line segments.
 
     Args:
-        app: PowerFactory application instance
-        devices: List of Device dataclass objects to populate
+        app: PowerFactory application instance.
+        devices: List of Device dataclasses to populate.
 
     Side Effects:
-        Updates section_terms, section_loads, and sect_lines for each device
-    """
+        Updates sect_terms, sect_loads, and sect_lines for each device.
 
+    Note:
+        - Terminals must have voltage > 1kV to be included
+        - SEQ region uses ElmLod for loads
+        - Regional models use ElmTr2 (excluding regulators)
+    """
     all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
     grids = [grid for grid in all_grids if grid.outserv == 0]
 
     region = helper.obtain_region(app)
+
     for device in devices:
         terminals = [device.term]
         loads = []
         lines = []
+
         down_devices = device.cubicle.GetAll(1, 0)
-        # If the external grid is in the downstream list, you're searching in the wrong direction
+
+        # If external grid is downstream, search in opposite direction
         if any(item in grids for item in down_devices):
             down_objs = device.cubicle.GetAll(0, 0)
         else:
             down_objs = down_devices
+
         for obj in down_objs:
-            if obj.GetClassName() == dd.ElementType.TERM.value and obj.uknom > 1:
+            class_name = obj.GetClassName()
+
+            if class_name == dd.ElementType.TERM.value and obj.uknom > 1:
                 terminals.append(obj)
-            if obj.GetClassName() == dd.ElementType.LOAD.value and region == 'SEQ':
+
+            if class_name == dd.ElementType.LOAD.value and region == 'SEQ':
                 loads.append(obj)
-            if obj.GetClassName() == dd.ElementType.TFMR.value and region == 'Regional Models':
-                load_type = obj.typ_id
-                if "Regulators" not in load_type.GetFullName():
-                    loads.append(obj)
-            if obj.GetClassName() == dd.ElementType.LINE.value:
+
+            if class_name == dd.ElementType.TFMR.value:
+                if region == 'Regional Models':
+                    load_type = obj.typ_id
+                    if "Regulators" not in load_type.GetFullName():
+                        loads.append(obj)
+
+            if class_name == dd.ElementType.LINE.value:
                 lines.append(obj)
+
         device.sect_terms = terminals
         device.sect_loads = loads
         device.sect_lines = lines
 
 
-def us_ds_device(devices: List[dd.Device], bu_devices: Dict):
+def us_ds_device(
+    devices: List[dd.Device],
+    bu_devices: Dict
+) -> None:
     """
+    Establish upstream and downstream device relationships.
 
-    :param devices:
-    :param bu_devices:
-    :return:
+    Determines which devices are upstream (backup) and downstream of
+    each device based on terminal inclusion in protection sections.
+
+    Args:
+        devices: List of Device dataclasses.
+        bu_devices: Dictionary of backup devices by external grid.
+
+    Side Effects:
+        Populates us_devices and ds_devices lists for each device.
     """
-
     for device in devices:
         us_devices = []
+
         for other_device in devices:
             if other_device == device:
                 continue
             if device.term in other_device.sect_terms:
                 us_devices.append(other_device)
+
         if us_devices:
+            # Select device with smallest section as immediate backup
             bu_device = min(us_devices, key=lambda item: len(item.sect_terms))
             device.us_devices.append(bu_device)
             bu_device.ds_devices.append(device)
+
+        # Check external grid backup devices
         if not device.us_devices:
-            connected_elements = device.cubicle.GetAll(1, 0) + device.cubicle.GetAll(0, 0)
+            connected = device.cubicle.GetAll(1, 0) + device.cubicle.GetAll(0, 0)
             if bu_devices:
                 for grid, grid_devices in bu_devices.items():
-                    if grid in connected_elements:
+                    if grid in connected:
                         device.us_devices.extend(grid_devices)
 
 
-def get_ds_capacity(devices: List[dd.Device]):
+def get_ds_capacity(devices: List[dd.Device]) -> None:
     """
-    Calculate the capacity of all distribution transformers downstream of each device.
+    Calculate total downstream transformer capacity for each device.
+
+    Sums the kVA ratings of all loads/transformers downstream of
+    each protection device.
+
+    Args:
+        devices: List of Device dataclasses with sect_loads populated.
+
+    Side Effects:
+        Sets ds_capacity attribute on each device.
     """
     def _get_load(obj: pft.ElmLod) -> float:
-        return obj.Strat if obj.GetClassName() == dd.ElementType.LOAD.value else obj.Snom_a * 1000
+        """Extract kVA rating from load or transformer."""
+        if obj.GetClassName() == dd.ElementType.LOAD.value:
+            return obj.Strat
+        return obj.Snom_a * 1000
 
     for device in devices:
-        device.ds_capacity = round(sum([_get_load(obj) for obj in device.sect_loads]))
+        device.ds_capacity = round(
+            sum([_get_load(obj) for obj in device.sect_loads])
+        )
 
 
-def get_device_sections(devices: List[dd.Device]):
+def get_device_sections(devices: List[dd.Device]) -> None:
     """
+    Partition network into protection sections for each device.
 
-    :param devices:
-    :return:
+    Removes overlapping elements between device sections so each
+    element is assigned to only its most immediate protection device.
+
+    Args:
+        devices: List of Device dataclasses with downstream objects.
+
+    Side Effects:
+        Converts sect_terms, sect_loads, sect_lines to dataclass lists
+        with only the elements belonging to each device's section.
     """
-
     def _sections(devices_objs):
-        # Sort the keys by the length of their lists in descending order
-        sorted_keys = sorted(devices_objs, key=lambda k: len(devices_objs[k]), reverse=True)
-        # Iterate over the sorted keys
+        """Remove overlapping elements from larger sections."""
+        sorted_keys = sorted(
+            devices_objs,
+            key=lambda k: len(devices_objs[k]),
+            reverse=True
+        )
+
         for i, key1 in enumerate(sorted_keys):
             for key2 in sorted_keys[i + 1:]:
                 set1 = set(devices_objs[key1])
                 set2 = set(devices_objs[key2])
-                # Find common elements except the key of the shorter list (key2)
                 common_elements = set1 & set2 - {key2}
-                # Remove common elements from the longer list (key1's list)
-                devices_objs[key1] = [elem for elem in devices_objs[key1] if elem not in common_elements]
+                devices_objs[key1] = [
+                    elem for elem in devices_objs[key1]
+                    if elem not in common_elements
+                ]
         return devices_objs
 
-    devices_terms = {device.term:device.sect_terms for device in devices}
-    devices_loads = {device.term:device.sect_loads for device in devices}
-    devices_lines = {device.term:device.sect_lines for device in devices}
+    # Build dictionaries for sectioning
+    devices_terms = {device.term: device.sect_terms for device in devices}
+    devices_loads = {device.term: device.sect_loads for device in devices}
+    devices_lines = {device.term: device.sect_lines for device in devices}
 
+    # Apply sectioning and convert to dataclasses
     for device in devices:
         section_terms = _sections(devices_terms)[device.term]
-        dataclass_terms = [dd.initialise_term_dataclass(elmterm) for elmterm in section_terms]
-
+        dataclass_terms = [
+            dd.initialise_term_dataclass(elmterm)
+            for elmterm in section_terms
+        ]
         device.sect_terms = dataclass_terms
+
         section_loads = _sections(devices_loads)[device.term]
-        dataclass_loads = [dd.initialise_load_dataclass(elmlod) for elmlod in section_loads]
+        dataclass_loads = [
+            dd.initialise_load_dataclass(elmlod)
+            for elmlod in section_loads
+        ]
         device.sect_loads = dataclass_loads
 
         section_lines = _sections(devices_lines)[device.term]
-        dataclass_lines = []
-        for elmlne in section_lines:
-            dataclass_lines.append(dd.initialise_line_dataclass(elmlne))
+        dataclass_lines = [
+            dd.initialise_line_dataclass(elmlne)
+            for elmlne in section_lines
+        ]
         device.sect_lines = dataclass_lines
 
 
-def terminal_fls(devices: List[dd.Device], bound: str, f_type: str):
+def terminal_fls(
+    devices: List[dd.Device],
+    bound: str,
+    f_type: str
+) -> None:
     """
+    Extract terminal fault currents from short-circuit study results.
 
-    :param devices:
-    :param bound:
-    :param f_type:
-    :return:
+    Reads fault current results from PowerFactory and stores them
+    in the appropriate Termination dataclass attributes.
+
+    Args:
+        devices: List of Device dataclasses with sect_terms.
+        bound: Study bound - 'Max', 'Min', or 'SN_Min'.
+        f_type: Fault type - 'Ground', 'Ground Z10', 'Ground Z50',
+            '3-Phase', or '2-Phase'.
+
+    Side Effects:
+        Sets fault current attributes on Termination dataclasses.
     """
-
     for device in devices:
         for terminal in device.sect_terms:
             elmterm = terminal.obj
+            current = analysis.get_terminal_current(elmterm)
+
             if bound == 'Max':
                 if f_type == 'Ground':
-                    terminal.max_fl_pg = analysis.get_terminal_current(elmterm)
+                    terminal.max_fl_pg = current
                 elif f_type == '3-Phase':
-                    terminal.max_fl_3ph = analysis.get_terminal_current(elmterm)
+                    terminal.max_fl_3ph = current
                 else:
-                    terminal.max_fl_2ph = analysis.get_terminal_current(elmterm)
+                    terminal.max_fl_2ph = current
+
             elif bound == 'Min':
                 if f_type == 'Ground':
-                    terminal.min_fl_pg = analysis.get_terminal_current(elmterm)
+                    terminal.min_fl_pg = current
                 elif f_type == 'Ground Z10':
-                    terminal.min_fl_pg10 = analysis.get_terminal_current(elmterm)
+                    terminal.min_fl_pg10 = current
                 elif f_type == 'Ground Z50':
-                    terminal.min_fl_pg50 = analysis.get_terminal_current(elmterm)
+                    terminal.min_fl_pg50 = current
                 elif f_type == '3-Phase':
-                    terminal.min_fl_3ph = analysis.get_terminal_current(elmterm)
+                    terminal.min_fl_3ph = current
                 else:
-                    terminal.min_fl_2ph = analysis.get_terminal_current(elmterm)
-            else:
+                    terminal.min_fl_2ph = current
+
+            else:  # SN_Min
                 if f_type == 'Ground':
-                    terminal.min_sn_fl_pg = analysis.get_terminal_current(elmterm)
+                    terminal.min_sn_fl_pg = current
                 elif f_type == 'Ground Z10':
-                    terminal.min_sn_fl_pg10 = analysis.get_terminal_current(elmterm)
+                    terminal.min_sn_fl_pg10 = current
                 elif f_type == 'Ground Z50':
-                    terminal.min_sn_fl_pg50 = analysis.get_terminal_current(elmterm)
+                    terminal.min_sn_fl_pg50 = current
                 elif f_type == '2-Phase':
-                    terminal.min_sn_fl_2ph = analysis.get_terminal_current(elmterm)
+                    terminal.min_sn_fl_2ph = current
 
 
-def append_floating_terms(app: pft.Application, external_grid: Dict, devices: List[dd.Device], floating_terms: Dict, consider_prot: str):
+def append_floating_terms(
+    app: pft.Application,
+    external_grid: Dict,
+    devices: List[dd.Device],
+    floating_terms: Dict,
+    consider_prot: str
+) -> None:
     """
+    Calculate fault currents for floating terminals.
 
-    :param app:
-    :param external_grid:
-    :param devices:
-    :param floating_terms:
-    :param consider_prot:
-    :return:
+    Floating terminals require fault calculations at specific line
+    locations rather than at busbars. This function performs those
+    calculations and adds the results to device section terminals.
+
+    Args:
+        app: PowerFactory application instance.
+        external_grid: Dictionary of external grid parameters.
+        devices: List of Device dataclasses.
+        floating_terms: Dictionary from get_floating_terminals().
+        consider_prot: Protection consideration mode.
+
+    Side Effects:
+        Appends Termination dataclasses to device.sect_terms.
     """
-
     for dev, lines in floating_terms.items():
         for line, elmterm in lines.items():
+            # Determine fault location percentage
             if line.bus1.cterm == elmterm:
                 ppro = 1
             else:
                 ppro = 99
+
             termination = dd.initialise_term_dataclass(elmterm)
+
+            # Run fault studies at the line location
             study_configs = [
-                ('Max', '3-Phase','max_fl_3ph'), ('Max', '2-Phase', 'max_fl_2ph'), ('Max', 'Ground', 'max_fl_pg'),
-                ('Min', '3-Phase', 'min_fl_3ph'), ('Min', '2-Phase', 'min_fl_2ph'), ('Min', 'Ground', 'min_fl_pg'),
-                ('Min', 'Ground Z10', 'min_fl_pg10'), ('Min', 'Ground Z50', 'min_fl_pg50'),
+                ('Max', '3-Phase', 'max_fl_3ph'),
+                ('Max', '2-Phase', 'max_fl_2ph'),
+                ('Max', 'Ground', 'max_fl_pg'),
+                ('Min', '3-Phase', 'min_fl_3ph'),
+                ('Min', '2-Phase', 'min_fl_2ph'),
+                ('Min', 'Ground', 'min_fl_pg'),
+                ('Min', 'Ground Z10', 'min_fl_pg10'),
+                ('Min', 'Ground Z50', 'min_fl_pg50'),
             ]
+
             for bound, fault_type, attribute in study_configs:
-                analysis.short_circuit(app, bound, fault_type, consider_prot, location=line, relative=ppro)
+                analysis.short_circuit(
+                    app, bound, fault_type, consider_prot,
+                    location=line, relative=ppro
+                )
                 current = analysis.get_line_current(line)
                 setattr(termination, attribute, current)
 
-            if grid_equivalance_check:
+            # Handle system normal minimum
+            if grid_equivalance_check(external_grid):
                 termination.min_sn_fl_pg = termination.min_fl_pg
                 termination.min_sn_fl_pg10 = termination.min_fl_pg10
                 termination.min_sn_fl_pg50 = termination.min_fl_pg50
                 termination.min_sn_fl_2ph = termination.min_fl_2ph
             else:
-                sn_study_configs = [
-                    ('Min', '2-Phase', 'min_sn_fl_2ph'), ('Min', 'Ground', 'min_sn_fl_pg'),
-                    ('Min', 'Ground Z10', 'min_sn_fl_pg10'), ('Min', 'Ground Z50', 'min_sn_fl_pg50'),
+                sn_configs = [
+                    ('Min', '2-Phase', 'min_sn_fl_2ph'),
+                    ('Min', 'Ground', 'min_sn_fl_pg'),
+                    ('Min', 'Ground Z10', 'min_sn_fl_pg10'),
+                    ('Min', 'Ground Z50', 'min_sn_fl_pg50'),
                 ]
                 reset_min_source_imp(external_grid, sys_norm_min=True)
-                for bound, fault_type, attribute in sn_study_configs:
-                    analysis.short_circuit(app, bound, fault_type, consider_prot, location=line, relative=ppro)
+                for bound, fault_type, attribute in sn_configs:
+                    analysis.short_circuit(
+                        app, bound, fault_type, consider_prot,
+                        location=line, relative=ppro
+                    )
                     current = analysis.get_line_current(line)
                     setattr(termination, attribute, current)
                 reset_min_source_imp(external_grid, sys_norm_min=False)
 
-            sect_terms = [device.sect_terms for device in devices if device.term == dev][0]
+            # Add to device section terminals
+            sect_terms = [
+                device.sect_terms for device in devices
+                if device.term == dev
+            ][0]
             sect_terms.append(termination)
-    # Reset short-circuit command module to default state.
+
+    # Reset short-circuit command to default state
     comshc = app.GetFromStudyCase("Short_Circuit.ComShc")
-    study_templates.apply_sc(comshc, bound='Max', f_type='Ground', consider_prot='All')
+    study_templates.apply_sc(comshc, bound='Max', f_type='Ground',
+                             consider_prot='All')
 
 
 def grid_equivalance_check(new_grid_data: Dict) -> bool:
+    """
+    Check if minimum equals system normal minimum grid impedance.
+
+    If the grid impedance values are identical, system normal minimum
+    calculations can be skipped by copying the minimum values.
+
+    Args:
+        new_grid_data: Dictionary of external grid parameters.
+
+    Returns:
+        True if minimum and system normal minimum are identical.
+    """
     identical_grids = True
     for grid, attributes in new_grid_data.items():
-        for i in range (5, 10):
-            if attributes[i] != attributes[i+5]:
+        for i in range(5, 10):
+            if attributes[i] != attributes[i + 5]:
                 identical_grids = False
                 break
     return identical_grids
 
 
-def reset_min_source_imp(new_grid_data: Dict, sys_norm_min: bool=False):
-    """"""
+def reset_min_source_imp(
+    new_grid_data: Dict,
+    sys_norm_min: bool = False
+) -> None:
+    """
+    Toggle external grid impedance between minimum and system normal.
 
+    Temporarily modifies external grid parameters for system normal
+    minimum fault calculations.
+
+    Args:
+        new_grid_data: Dictionary of external grid parameters.
+        sys_norm_min: If True, set system normal minimum values.
+            If False, restore standard minimum values.
+
+    Side Effects:
+        Modifies external grid PowerFactory attributes.
+    """
     for grid, attributes in new_grid_data.items():
         if sys_norm_min and attributes[10] <= 0:
             grid.SetAttribute('outserv', 1)
@@ -329,13 +524,18 @@ def reset_min_source_imp(new_grid_data: Dict, sys_norm_min: bool=False):
             grid.SetAttribute('r0tx0min', attributes[9])
 
 
-def copy_min_fls(devices: List[dd.Device]):
+def copy_min_fls(devices: List[dd.Device]) -> None:
     """
+    Copy minimum fault levels to system normal minimum fields.
 
-    :param devices:
-    :param bound:
-    :param f_type:
-    :return:
+    Used when grid impedance values are identical for minimum and
+    system normal minimum calculations.
+
+    Args:
+        devices: List of Device dataclasses with populated terminals.
+
+    Side Effects:
+        Sets min_sn_fl_* attributes on Termination dataclasses.
     """
     for device in devices:
         for terminal in device.sect_terms:
@@ -345,121 +545,237 @@ def copy_min_fls(devices: List[dd.Device]):
             terminal.min_sn_fl_2ph = terminal.min_fl_2ph
 
 
-def update_device_data(region: str, devices: List[dd.Device]):
+def update_device_data(region: str, devices: List[dd.Device]) -> None:
     """
+    Populate device-level fault current summaries from section data.
 
-    :param devices:
-    :return:
+    Calculates maximum and minimum fault currents across all terminals
+    in each device's protection section.
+
+    Args:
+        region: Network region for fault impedance selection.
+        devices: List of Device dataclasses with populated terminals.
+
+    Side Effects:
+        Sets fault current attributes and max_ds_tr on each device.
+        Sorts sect_terms by min_fl_pg descending.
     """
-
     def _safe_max(sequence: List) -> Union[int, float]:
+        """Return maximum value or 0 if sequence is empty."""
         try:
             return max(sequence)
         except ValueError:
             return 0
 
     def _safe_min(sequence: List) -> Union[int, float]:
+        """Return minimum value or 0 if sequence is empty."""
         try:
             return min(sequence)
         except ValueError:
             return 0
 
     for device in devices:
-        # Update transformer data
-        max_tr_size = _safe_max([load.load_kva for load in device.sect_loads])
-        max_ds_trs = [load for load in device.sect_loads if load.load_kva == max_tr_size]
-        # The load must have a termination in the list of section terminations
+        # Find largest downstream transformer
+        max_tr_size = _safe_max(
+            [load.load_kva for load in device.sect_loads]
+        )
+        max_ds_trs = [
+            load for load in device.sect_loads
+            if load.load_kva == max_tr_size
+        ]
+
+        # Transformer must have terminal in section
         sect_terms = [term.obj for term in device.sect_terms]
-        max_ds_trs = [load for load in max_ds_trs if load.term in sect_terms]
-        # Initiate max values
+        max_ds_trs = [
+            load for load in max_ds_trs
+            if load.term in sect_terms
+        ]
+
+        # Initialize max transformer
         try:
             max_ds_tr = max_ds_trs[0]
         except IndexError:
             max_ds_tr = dd.initialise_load_dataclass(None)
+
+        # Find transformer with highest fault level
         max_fl_pg = 0
-        # Search for max tr
         for tr in max_ds_trs:
-            term_dataclass = [t for t in device.sect_terms if t.obj == tr.term][0]
+            term_dataclass = [
+                t for t in device.sect_terms if t.obj == tr.term
+            ][0]
             if term_dataclass.max_fl_pg >= max_fl_pg:
                 max_fl_pg = term_dataclass.max_fl_pg
                 tr.term = term_dataclass.obj
                 tr.max_pg = term_dataclass.max_fl_pg
-                tr.max_ph = max(term_dataclass.max_fl_3ph, term_dataclass.max_fl_3ph)
+                tr.max_ph = max(
+                    term_dataclass.max_fl_3ph, term_dataclass.max_fl_3ph
+                )
                 max_ds_tr = tr
         device.max_ds_tr = max_ds_tr
 
-        # Update device fl data
-        device.max_fl_3ph = _safe_max([term.max_fl_3ph for term in device.sect_terms])
-        device.max_fl_2ph = _safe_max([term.max_fl_2ph for term in device.sect_terms])
-        device.max_fl_pg = _safe_max([term.max_fl_pg for term in device.sect_terms])
-        device.min_fl_3ph = _safe_min([term.min_fl_3ph for term in device.sect_terms if term.min_fl_3ph > 0])
-        device.min_fl_2ph = _safe_min([term.min_fl_2ph for term in device.sect_terms if term.min_fl_2ph > 0])
-        device.min_fl_pg = (
-            _safe_min([fault_impedance.get_terminal_pg_fault(region, term) for term in device.sect_terms if term.min_fl_pg > 0]))
-        device.min_sn_fl_2ph = _safe_min([term.min_sn_fl_2ph for term in device.sect_terms if term.min_sn_fl_2ph > 0])
-        device.min_sn_fl_pg = (
-            _safe_min([fault_impedance.get_terminal_pg_fault(region, term, system_normal=True) for term in device.sect_terms if term.min_sn_fl_pg > 0]))
-        device.sect_terms = sorted(device.sect_terms, key=lambda term: term.min_fl_pg, reverse=True)
+        # Calculate device fault current summaries
+        device.max_fl_3ph = _safe_max(
+            [term.max_fl_3ph for term in device.sect_terms]
+        )
+        device.max_fl_2ph = _safe_max(
+            [term.max_fl_2ph for term in device.sect_terms]
+        )
+        device.max_fl_pg = _safe_max(
+            [term.max_fl_pg for term in device.sect_terms]
+        )
+        device.min_fl_3ph = _safe_min(
+            [term.min_fl_3ph for term in device.sect_terms
+             if term.min_fl_3ph > 0]
+        )
+        device.min_fl_2ph = _safe_min(
+            [term.min_fl_2ph for term in device.sect_terms
+             if term.min_fl_2ph > 0]
+        )
+        device.min_fl_pg = _safe_min(
+            [fault_impedance.get_terminal_pg_fault(region, term)
+             for term in device.sect_terms if term.min_fl_pg > 0]
+        )
+        device.min_sn_fl_2ph = _safe_min(
+            [term.min_sn_fl_2ph for term in device.sect_terms
+             if term.min_sn_fl_2ph > 0]
+        )
+        device.min_sn_fl_pg = _safe_min(
+            [fault_impedance.get_terminal_pg_fault(region, term, True)
+             for term in device.sect_terms if term.min_sn_fl_pg > 0]
+        )
+
+        # Sort terminals by minimum fault level
+        device.sect_terms = sorted(
+            device.sect_terms,
+            key=lambda term: term.min_fl_pg,
+            reverse=True
+        )
 
 
-def update_line_data(app: pft.Application, region: str, devices: List[dd.Device]):
+def update_line_data(
+    app: pft.Application,
+    region: str,
+    devices: List[dd.Device]
+) -> None:
     """
-    Get max and min fault current seen by the line for faults occurring within the device protection section
-    (i.e. not just faults that occur on the line).
-    These values are used in the conductor damage assessment.
-    :param app:
-    :param region:
-    :param devices:
-    :return:
-    """
+    Populate line fault current data for conductor damage assessment.
 
+    Calculates maximum and minimum fault currents seen by each line
+    for faults occurring within the device's protection section.
+
+    Args:
+        app: PowerFactory application instance.
+        region: Network region for fault impedance selection.
+        devices: List of Device dataclasses with populated terminals.
+
+    Side Effects:
+        Sets fault current attributes on Line dataclasses.
+        Sorts sect_lines by min_fl_pg descending.
+    """
     all_grids = app.GetCalcRelevantObjects('*.ElmXnet')
     grids = [grid for grid in all_grids if grid.outserv == 0]
 
     for device in devices:
         lines = device.sect_lines
         sect_term_obs = [term.obj for term in device.sect_terms]
+
         for line in lines:
             elmlne = line.obj
-            lne_cubs = [cub for cub in [elmlne.bus1, elmlne.bus2] if cub is not None]
+            lne_cubs = [
+                cub for cub in [elmlne.bus1, elmlne.bus2]
+                if cub is not None
+            ]
             lne_term_obs = [cub.cterm for cub in lne_cubs]
 
             if any(terms in sect_term_obs for terms in lne_term_obs):
-                line_terms = [term for term in device.sect_terms if term.obj in lne_term_obs]
-                line.max_fl_3ph = max([term.max_fl_3ph for term in line_terms])
-                line.max_fl_2ph = max([term.max_fl_2ph for term in line_terms])
-                line.max_fl_pg = max([term.max_fl_pg for term in line_terms])
+                line_terms = [
+                    term for term in device.sect_terms
+                    if term.obj in lne_term_obs
+                ]
 
-                # Get line min (i.e. min fl for faults downstream of the line in the protection section)
-                lne_max_term_obj = [term.obj for term in line_terms if term.max_fl_pg == line.max_fl_pg][0]
-                max_lne_cub = [cub for cub in lne_cubs if cub.cterm == lne_max_term_obj][0]
+                # Maximum fault currents at line terminals
+                line.max_fl_3ph = max(
+                    [term.max_fl_3ph for term in line_terms]
+                )
+                line.max_fl_2ph = max(
+                    [term.max_fl_2ph for term in line_terms]
+                )
+                line.max_fl_pg = max(
+                    [term.max_fl_pg for term in line_terms]
+                )
+
+                # Find downstream terminals for minimum faults
+                lne_max_term_obj = [
+                    term.obj for term in line_terms
+                    if term.max_fl_pg == line.max_fl_pg
+                ][0]
+                max_lne_cub = [
+                    cub for cub in lne_cubs
+                    if cub.cterm == lne_max_term_obj
+                ][0]
 
                 down_elements = max_lne_cub.GetAll(1, 0)
-                # If the external grid is in the downstream list, you're searching in the wrong direction
                 if any(item in grids for item in down_elements):
                     down_objs = max_lne_cub.GetAll(0, 0)
                 else:
                     down_objs = down_elements
 
-                line_ds_terms = [obj for obj in down_objs if obj.GetClassName() == dd.ElementType.TERM.value]
+                line_ds_terms = [
+                    obj for obj in down_objs
+                    if obj.GetClassName() == dd.ElementType.TERM.value
+                ]
+
+                # Calculate minimum fault currents
                 if line_ds_terms:
                     try:
-                        line.min_fl_3ph = min([term.min_fl_3ph for term in device.sect_terms if term.obj in line_ds_terms])
-                        line.min_fl_2ph = min([term.min_fl_2ph for term in device.sect_terms if term.obj in line_ds_terms])
-                        line.min_sn_fl_2ph = min([term.min_sn_fl_2ph for term in device.sect_terms if term.obj in line_ds_terms])
+                        line.min_fl_3ph = min(
+                            [term.min_fl_3ph for term in device.sect_terms
+                             if term.obj in line_ds_terms]
+                        )
+                        line.min_fl_2ph = min(
+                            [term.min_fl_2ph for term in device.sect_terms
+                             if term.obj in line_ds_terms]
+                        )
+                        line.min_sn_fl_2ph = min(
+                            [term.min_sn_fl_2ph for term in device.sect_terms
+                             if term.obj in line_ds_terms]
+                        )
                     except (AttributeError, ValueError):
                         app.PrintPlain(line.obj)
                         app.PrintPlain(f"max_lne_cub: {max_lne_cub}")
                         app.PrintPlain(f"line_ds_terms: {line_ds_terms}")
-                    line.min_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term) for term in device.sect_terms if term.obj in line_ds_terms])
-                    line.min_sn_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term, system_normal=True) for term in device.sect_terms if term.obj in line_ds_terms])
+
+                    line.min_fl_pg = min(
+                        [fault_impedance.get_terminal_pg_fault(region, term)
+                         for term in device.sect_terms
+                         if term.obj in line_ds_terms]
+                    )
+                    line.min_sn_fl_pg = min(
+                        [fault_impedance.get_terminal_pg_fault(region, term, True)
+                         for term in device.sect_terms
+                         if term.obj in line_ds_terms]
+                    )
                 else:
-                    line.min_fl_3ph = min([term.min_fl_3ph for term in line_terms])
-                    line.min_fl_2ph = min([term.min_fl_2ph for term in line_terms])
-                    line.min_sn_fl_2ph = min([term.min_sn_fl_2ph for term in line_terms])
-                    line.min_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term) for term in line_terms])
-                    line.min_sn_fl_pg = min([fault_impedance.get_terminal_pg_fault(region, term, system_normal=True) for term in line_terms])
+                    # Use line terminal values if no downstream terminals
+                    line.min_fl_3ph = min(
+                        [term.min_fl_3ph for term in line_terms]
+                    )
+                    line.min_fl_2ph = min(
+                        [term.min_fl_2ph for term in line_terms]
+                    )
+                    line.min_sn_fl_2ph = min(
+                        [term.min_sn_fl_2ph for term in line_terms]
+                    )
+                    line.min_fl_pg = min(
+                        [fault_impedance.get_terminal_pg_fault(region, term)
+                         for term in line_terms]
+                    )
+                    line.min_sn_fl_pg = min(
+                        [fault_impedance.get_terminal_pg_fault(region, term, True)
+                         for term in line_terms]
+                    )
             else:
+                # Line not in section - set all to zero
                 line.max_fl_3ph = 0
                 line.max_fl_2ph = 0
                 line.max_fl_pg = 0
@@ -468,4 +784,10 @@ def update_line_data(app: pft.Application, region: str, devices: List[dd.Device]
                 line.min_fl_pg = 0
                 line.min_sn_fl_2ph = 0
                 line.min_sn_fl_pg = 0
-        device.sect_lines = sorted(device.sect_lines, key=lambda line: line.min_fl_pg, reverse=True)
+
+        # Sort lines by minimum fault level
+        device.sect_lines = sorted(
+            device.sect_lines,
+            key=lambda line: line.min_fl_pg,
+            reverse=True
+        )

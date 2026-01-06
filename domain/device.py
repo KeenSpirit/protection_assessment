@@ -3,6 +3,12 @@ Protection device domain model for protection assessment.
 
 A device represents a protection element (relay or fuse) with its
 electrical context, fault current data, and network topology.
+
+Classes:
+    Device: Protection device dataclass
+
+Functions:
+    initialise_dev_dataclass: Create Device from PowerFactory element
 """
 
 from dataclasses import dataclass, field
@@ -17,48 +23,50 @@ if TYPE_CHECKING:
 @dataclass
 class Device:
     """
-    Represents a protection device (relay or fuse) with its electrical context.
+    Represents a protection device (relay or fuse) with electrical context.
 
-    The Device dataclass captures both the static configuration of a protection
-    device and the dynamic results from fault studies and network analysis.
+    The Device dataclass captures both the static configuration of a
+    protection device and the dynamic results from fault studies and
+    network analysis.
 
     Core Attributes (set at initialization):
-        obj: The PowerFactory device object (ElmRelay or RelFuse)
-        cubicle: The device's cubicle location in the network
-        term: The connected terminal
-        phases: Number of phases (1, 2, or 3)
-        l_l_volts: Line-to-line voltage in kV
+        obj: The PowerFactory device object (ElmRelay or RelFuse).
+        cubicle: The device's cubicle location in the network.
+        term: The connected terminal.
+        phases: Number of phases (1, 2, or 3).
+        l_l_volts: Line-to-line voltage in kV.
 
     Capacity Data (populated during analysis):
-        ds_capacity: Total downstream transformer capacity in kVA
-        max_ds_tr: Largest downstream transformer (Tfmr dataclass)
+        ds_capacity: Total downstream transformer capacity in kVA.
+        max_ds_tr: Largest downstream transformer (Tfmr dataclass).
 
     Maximum Fault Currents (populated by fault study):
-        max_fl_3ph: Maximum 3-phase fault current (A)
-        max_fl_2ph: Maximum 2-phase fault current (A)
-        max_fl_pg: Maximum phase-ground fault current (A)
+        max_fl_3ph: Maximum 3-phase fault current (A).
+        max_fl_2ph: Maximum 2-phase fault current (A).
+        max_fl_pg: Maximum phase-ground fault current (A).
 
     Minimum Fault Currents (populated by fault study):
-        min_fl_3ph: Minimum 3-phase fault current (A)
-        min_fl_2ph: Minimum 2-phase fault current (A)
-        min_fl_pg: Minimum phase-ground fault current (A)
+        min_fl_3ph: Minimum 3-phase fault current (A).
+        min_fl_2ph: Minimum 2-phase fault current (A).
+        min_fl_pg: Minimum phase-ground fault current (A).
 
     System Normal Minimum Fault Currents:
-        min_sn_fl_2ph: Minimum system normal 2-phase fault current (A)
-        min_sn_fl_pg: Minimum system normal phase-ground fault current (A)
+        min_sn_fl_2ph: Minimum system normal 2-phase fault current (A).
+        min_sn_fl_pg: Minimum system normal phase-ground fault current (A).
 
     Topology (populated by network tracing):
-        sect_terms: Downstream terminals in this protection section
-        sect_loads: Downstream loads/transformers in this section
-        sect_lines: Lines in this protection section
-        us_devices: Upstream protection devices (backup protection)
-        ds_devices: Downstream protection devices
+        sect_terms: Downstream terminals in this protection section.
+        sect_loads: Downstream loads/transformers in this section.
+        sect_lines: Lines in this protection section.
+        us_devices: Upstream protection devices (backup protection).
+        ds_devices: Downstream protection devices.
 
     Example:
         >>> device = initialise_dev_dataclass(elm_relay)
         >>> print(f"Device {device.obj.loc_name} at {device.l_l_volts}kV")
         >>> print(f"Max 3ph fault: {device.max_fl_3ph}A")
     """
+
     # Core identification - always required
     obj: Any
     cubicle: "pft.StaCubic"
@@ -101,10 +109,10 @@ def initialise_dev_dataclass(element: Any) -> Optional[Device]:
 
     Args:
         element: The PowerFactory device object. Supported types:
-                 - ElmRelay: Protection relay
-                 - RelFuse: Fuse element
-                 - ElmFeeder: Feeder (uses obj_id as cubicle)
-                 - ElmCoup: Coupler/switch (uses bus1 as cubicle)
+            - ElmRelay: Protection relay
+            - RelFuse: Fuse element
+            - ElmFeeder: Feeder (uses obj_id as cubicle)
+            - ElmCoup: Coupler/switch (uses bus1 as cubicle)
 
     Returns:
         Initialized Device dataclass, or None if element is None.

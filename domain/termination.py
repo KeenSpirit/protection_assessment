@@ -1,8 +1,14 @@
 """
 Network termination (terminal) domain model for protection assessment.
 
-A termination represents a network terminal where fault studies are performed
-and protection reach is evaluated.
+A termination represents a network terminal where fault studies are
+performed and protection reach is evaluated.
+
+Classes:
+    Termination: Network terminal dataclass
+
+Functions:
+    initialise_term_dataclass: Create Termination from PowerFactory ElmTerm
 """
 
 from dataclasses import dataclass
@@ -24,37 +30,37 @@ class Termination:
     network location, used for protection coordination and reach analysis.
 
     Core Attributes (set at initialization):
-        obj: The PowerFactory ElmTerm object
-        phases: Number of phases (1, 2, or 3)
-        l_l_volts: Line-to-line voltage in kV
+        obj: The PowerFactory ElmTerm object.
+        phases: Number of phases (1, 2, or 3).
+        l_l_volts: Line-to-line voltage in kV.
 
     Construction Type (determined during analysis):
-        constr: Construction type string ("OH", "UG", or "SWER")
-                Used to determine appropriate fault impedance values.
+        constr: Construction type string ("OH", "UG", or "SWER").
+            Used to determine appropriate fault impedance values.
 
     Maximum Fault Currents (populated by fault study):
-        max_fl_3ph: Maximum 3-phase fault current (A)
-        max_fl_2ph: Maximum 2-phase fault current (A)
-        max_fl_pg: Maximum phase-ground fault current (A)
+        max_fl_3ph: Maximum 3-phase fault current (A).
+        max_fl_2ph: Maximum 2-phase fault current (A).
+        max_fl_pg: Maximum phase-ground fault current (A).
 
     Minimum Fault Currents (populated by fault study):
-        min_fl_3ph: Minimum 3-phase fault current (A)
-        min_fl_2ph: Minimum 2-phase fault current (A)
-        min_fl_pg: Minimum phase-ground fault current (A)
+        min_fl_3ph: Minimum 3-phase fault current (A).
+        min_fl_2ph: Minimum 2-phase fault current (A).
+        min_fl_pg: Minimum phase-ground fault current (A).
 
     Impedance-Specific Minimum Fault Currents:
-        min_fl_pg10: Minimum PG fault with 10 ohm fault resistance (A)
-        min_fl_pg50: Minimum PG fault with 50 ohm fault resistance (A)
+        min_fl_pg10: Minimum PG fault with 10 ohm fault resistance (A).
+        min_fl_pg50: Minimum PG fault with 50 ohm fault resistance (A).
 
     System Normal Minimum Fault Currents:
-        min_sn_fl_2ph: Minimum system normal 2-phase fault current (A)
-        min_sn_fl_pg: Minimum system normal phase-ground fault current (A)
-        min_sn_fl_pg10: Min sys normal PG fault with 10 ohm resistance (A)
-        min_sn_fl_pg50: Min sys normal PG fault with 50 ohm resistance (A)
+        min_sn_fl_2ph: Minimum system normal 2-phase fault current (A).
+        min_sn_fl_pg: Minimum system normal phase-ground fault current (A).
+        min_sn_fl_pg10: Min sys normal PG fault, 10 ohm resistance (A).
+        min_sn_fl_pg50: Min sys normal PG fault, 50 ohm resistance (A).
 
     Grouped Fault Data (set after fault studies complete):
-        max_faults: Immutable FaultCurrents container for maximum values
-        min_faults: Immutable FaultCurrents container for minimum values
+        max_faults: Immutable FaultCurrents container for maximum values.
+        min_faults: Immutable FaultCurrents container for minimum values.
 
     Example:
         >>> term = initialise_term_dataclass(elm_term)
@@ -63,6 +69,7 @@ class Termination:
         >>> if term.max_faults:
         ...     print(f"Max phase fault: {term.max_faults.max_phase}A")
     """
+
     # Core identification - always required
     obj: "pft.ElmTerm"
     phases: int
@@ -104,7 +111,7 @@ def initialise_term_dataclass(elmterm: "pft.ElmTerm") -> Optional[Termination]:
     parameters. Fault current values are populated later by fault studies.
 
     Args:
-        elmterm: The PowerFactory ElmTerm object
+        elmterm: The PowerFactory ElmTerm object.
 
     Returns:
         Initialized Termination dataclass, or None if elmterm is None.
@@ -112,7 +119,7 @@ def initialise_term_dataclass(elmterm: "pft.ElmTerm") -> Optional[Termination]:
     Example:
         >>> elm_term = device.cubicle.cterm
         >>> term = initialise_term_dataclass(elm_term)
-        >>> print(f"Terminal: {term.obj.loc_name}, {term.phases}ph, {term.l_l_volts}kV")
+        >>> print(f"Terminal: {term.obj.loc_name}, {term.phases}ph")
     """
     if elmterm is None:
         return None

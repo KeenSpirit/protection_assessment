@@ -1,9 +1,9 @@
 """
 Domain models for PowerFactory protection assessment.
 
-This package contains the core domain models (dataclasses) used throughout
-the protection assessment system. Each model represents a distinct concept
-in the electrical network domain.
+This package contains the core domain models (dataclasses) used
+throughout the protection assessment system. Each model represents
+a distinct concept in the electrical network domain.
 
 Modules:
     enums: Element types, construction types, fault types
@@ -16,7 +16,7 @@ Modules:
     utils: Utility functions for domain operations
 
 Usage:
-    # Import the entire domain package (recommended for backward compatibility)
+    # Import the entire domain package (recommended)
     import domain as dd
 
     # Or import specific items
@@ -24,9 +24,10 @@ Usage:
     from domain.termination import Termination, initialise_term_dataclass
 
 Backward Compatibility:
-    This package provides the same interface as the original script_classes.py
-    module. Existing code using `import script_classes as dd` can be migrated
-    by changing to `import domain as dd` with minimal other changes.
+    This package provides the same interface as the original
+    script_classes.py module. Existing code using
+    `import script_classes as dd` can be migrated by changing to
+    `import domain as dd` with minimal other changes.
 
 Example:
     >>> import domain as dd
@@ -43,9 +44,9 @@ Example:
     >>> dd.populate_fault_currents(terminal)
 """
 
-# =============================================================================
+# ============================================================================
 # ENUMERATIONS
-# =============================================================================
+# ============================================================================
 
 from domain.enums import (
     ElementType,
@@ -54,15 +55,15 @@ from domain.enums import (
     ph_attr_lookup,
 )
 
-# =============================================================================
+# ============================================================================
 # FAULT DATA
-# =============================================================================
+# ============================================================================
 
 from domain.fault_data import FaultCurrents
 
-# =============================================================================
+# ============================================================================
 # DOMAIN MODELS
-# =============================================================================
+# ============================================================================
 
 from domain.feeder import Feeder, initialise_fdr_dataclass
 from domain.device import Device, initialise_dev_dataclass
@@ -70,15 +71,15 @@ from domain.termination import Termination, initialise_term_dataclass
 from domain.line import Line, initialise_line_dataclass
 from domain.transformer import Tfmr, initialise_load_dataclass
 
-# =============================================================================
+# ============================================================================
 # UTILITIES
-# =============================================================================
+# ============================================================================
 
 from domain.utils import populate_fault_currents
 
-# =============================================================================
+# ============================================================================
 # PUBLIC API
-# =============================================================================
+# ============================================================================
 
 __all__ = [
     # Enums

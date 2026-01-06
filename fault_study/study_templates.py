@@ -1,10 +1,26 @@
-"""Templates for PowerFactory short-circuit study configurations.
+"""
+Templates for PowerFactory short-circuit study configurations.
 
-This module provides configuration templates for different fault study types.
-Uses a single dataclass with a factory function.
+This module provides configuration templates for different fault study
+types using dataclasses and enumerations. The main entry point is the
+apply_sc() function which configures a ComShc command object.
+
+Classes:
+    SCMethod: Short-circuit calculation method enumeration
+    FaultType: PowerFactory fault type codes
+    CalculationBound: Maximum or minimum calculation
+    ProtTrippingCurrent: Protection tripping current mode
+    EvtShcType: Event short-circuit type codes
+    ConsiderProt: Protection device consideration
+    FaultLocation: Fault location selection mode
+    ShortCircuitConfig: Unified configuration dataclass
+
+Functions:
+    create_short_circuit_config: Factory for creating configurations
+    apply_sc: Apply configuration to PowerFactory ComShc command
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from enum import Enum
 
@@ -17,12 +33,14 @@ from pf_config import pft
 
 class SCMethod(Enum):
     """Short-circuit calculation method."""
+
     IEC60909 = 1
     Complete = 3
 
 
 class FaultType(Enum):
-    """PowerFactory fault type codes."""
+    """PowerFactory fault type codes for ComShc.iopt_shc attribute."""
+
     THREE_PHASE = '3psc'
     TWO_PHASE = '2psc'
     PHASE_TO_GROUND = 'spgf'
@@ -32,12 +50,14 @@ class FaultType(Enum):
 
 class CalculationBound(Enum):
     """Maximum or minimum fault level calculation."""
+
     MAXIMUM = 0
     MINIMUM = 1
 
 
 class ProtTrippingCurrent(Enum):
     """Protection tripping current calculation mode."""
+
     SUB_TRANSIENT = 0
     TRANSIENT = 1
     MIXED_MODE = 2
@@ -45,6 +65,7 @@ class ProtTrippingCurrent(Enum):
 
 class EvtShcType(Enum):
     """Event short-circuit type codes."""
+
     THREE_PHASE = 0
     TWO_PHASE = 1
     PHASE_TO_GROUND = 2
@@ -52,13 +73,15 @@ class EvtShcType(Enum):
 
 
 class ConsiderProt(Enum):
-    """Consider Protection Devices."""
+    """Consider protection devices in calculation."""
+
     NONE = 0
     ALL = 1
 
 
 class FaultLocation(Enum):
-    """Consider Protection Devices."""
+    """Fault location selection mode."""
+
     USER_SELECTION = 0
     BUSBARS_JUNCTIONS = 1
 
@@ -72,23 +95,40 @@ class ShortCircuitConfig:
     """
     Unified configuration for PowerFactory short-circuit studies.
 
-    Attributes:
-        iopt_mde: Calculation method (IEC60909 or Complete)
-        iopt_shc: Fault type code
-        iopt_cur: Maximum (0) or Minimum (1) calculation
-        iopt_cnf: Consider network configuration
-        ildfinit: Load flow initialization
-        cfac_full: Voltage factor (1.1 for max, 1.0 for min)
-        iIgnLoad: Ignore loads in calculation
-        iIgnLneCap: Ignore line capacitance
-        iIgnShnt: Ignore shunts
-        iopt_prot: Protection option
-        iIksForProt: Tripping current mode
-        Rf: Fault resistance (ohms)
-        Xf: Fault reactance (ohms)
-        i_p2psc: 2-phase short circuit option (for 3ph/2ph faults)
-        i_pspgf: Single-phase ground fault option (for ground faults)
+    This dataclass holds all parameters needed to configure a ComShc
+    short-circuit command. Use create_short_circuit_config() factory
+    function to create instances with appropriate defaults.
+
+    Calculation Parameters:
+        iopt_mde: Calculation method (IEC60909 or Complete).
+        iopt_shc: Fault type code string.
+        iopt_cur: Maximum (0) or Minimum (1) calculation.
+        iopt_cnf: Consider network configuration changes.
+        ildfinit: Load flow initialization before calculation.
+        cfac_full: Voltage factor (1.1 for max, 1.0 for min).
+
+    Simplification Options:
+        iIgnLoad: Ignore loads in calculation.
+        iIgnLneCap: Ignore line capacitance.
+        iIgnShnt: Ignore shunts.
+
+    Protection Options:
+        iopt_prot: Protection consideration mode.
+        iIksForProt: Tripping current calculation mode.
+
+    Fault Parameters:
+        Rf: Fault resistance in ohms.
+        Xf: Fault reactance in ohms.
+        i_p2psc: 2-phase short circuit option.
+        i_pspgf: Single-phase ground fault option.
+
+    Location Parameters:
+        iopt_allbus: Fault location mode.
+        iopt_dfr: Terminal selection (i or j).
+        shcobj: Element for user-selected fault location.
+        ppro: Fault distance from terminal i as percentage.
     """
+
     iopt_mde: int = SCMethod.Complete.value
     iopt_shc: str = FaultType.THREE_PHASE.value
     iopt_cur: int = CalculationBound.MAXIMUM.value
@@ -102,19 +142,24 @@ class ShortCircuitConfig:
     Rf: float = 0.0
     Xf: float = 0.0
     iopt_allbus: int = FaultLocation.BUSBARS_JUNCTIONS.value
-    iopt_prot: int = ConsiderProt.ALL.value # Consider all protection devices
+    iopt_prot: int = ConsiderProt.ALL.value
     # Optional fields for specific fault types
-    i_p2psc: int = 0  # Used for 3-phase and 2-phase minimum faults
-    i_pspgf: int = 0  # Used for ground faults
-    iopt_dfr: int = 0  # Used for User Selection; Terminal i or Terminal j
-    shcobj: Optional[pft.ElmLne] = None  # Used for User Selection
-    ppro: int = 1  # Used for User Selection; Fault Distance from Terminal i
+    i_p2psc: int = 0
+    i_pspgf: int = 0
+    iopt_dfr: int = 0
+    shcobj: Optional[pft.ElmLne] = None
+    ppro: int = 1
 
     def as_dict(self) -> Dict[str, Any]:
         """
         Return configuration as dictionary for applying to PowerFactory.
 
-        Excludes fields not relevant to the current fault type.
+        Excludes fields not relevant to the current fault type to avoid
+        setting unnecessary parameters on the ComShc object.
+
+        Returns:
+            Dictionary of attribute names and values suitable for
+            applying to a ComShc command object.
         """
         # Base fields always included
         base_fields = [
@@ -133,6 +178,8 @@ class ShortCircuitConfig:
             if self.iopt_shc in (
                     FaultType.THREE_PHASE.value, FaultType.TWO_PHASE.value):
                 result['i_p2psc'] = self.i_p2psc
+
+        # Add location-specific fields
         if self.iopt_allbus == FaultLocation.USER_SELECTION.value:
             result['iopt_dfr'] = self.iopt_dfr
             result['shcobj'] = self.shcobj
@@ -142,34 +189,51 @@ class ShortCircuitConfig:
 
 
 # =============================================================================
-# FACTORY FUNCTION TO CREATE CONFIGURATIONS
+# FACTORY FUNCTION
 # =============================================================================
 
 def create_short_circuit_config(
-        bound: str, fault_type: str, consider_prot: str,
-        location: Optional[pft.ElmLne] = None, relative: int = 0
-        ) -> ShortCircuitConfig:
+    bound: str,
+    fault_type: str,
+    consider_prot: str,
+    location: Optional[pft.ElmLne] = None,
+    relative: int = 0
+) -> ShortCircuitConfig:
     """
     Factory function to create short-circuit study configurations.
 
+    Creates a ShortCircuitConfig dataclass with appropriate settings
+    based on the study type parameters.
+
     Args:
-        bound: 'Max' or 'Min' for maximum/minimum fault level
-        fault_type: '3-Phase', '2-Phase', 'Ground', 'Ground Z10', or 'Ground Z50'
-        consider_prot: 'None', 'All'
-        location: pft.ElmLne
-        relative: 0-99
+        bound: 'Max' or 'Min' for maximum/minimum fault level.
+        fault_type: One of '3-Phase', '2-Phase', 'Ground',
+            'Ground Z10', or 'Ground Z50'.
+        consider_prot: 'None' or 'All' for protection consideration.
+        location: PowerFactory ElmLne for specific fault location.
+            None for all busbars calculation.
+        relative: Fault distance from terminal as percentage (0-99).
+
     Returns:
-        ShortCircuitConfig: Configured dataclass instance
+        Configured ShortCircuitConfig dataclass instance.
 
     Raises:
-        ValueError: If invalid bound or fault_type provided
+        ValueError: If invalid fault_type is provided.
+
+    Example:
+        >>> config = create_short_circuit_config('Max', '3-Phase', 'All')
+        >>> config.cfac_full
+        1.1
     """
     # Determine if maximum or minimum study
     is_max = bound == 'Max'
 
     # Set base values depending on max/min
     cfac = 1.1 if is_max else 1.0
-    calc_bound = CalculationBound.MAXIMUM.value if is_max else CalculationBound.MINIMUM.value
+    calc_bound = (
+        CalculationBound.MAXIMUM.value if is_max
+        else CalculationBound.MINIMUM.value
+    )
 
     # Determine fault type and resistance
     if fault_type == '3-Phase':
@@ -190,6 +254,7 @@ def create_short_circuit_config(
     else:
         raise ValueError(f"Unknown fault type: {fault_type}")
 
+    # Determine fault location settings
     if location is not None:
         iopt_allbus = 0
         shcobj = location
@@ -199,9 +264,10 @@ def create_short_circuit_config(
         shcobj = None
         ppro = 0
 
+    # Determine protection consideration
     if consider_prot == 'All':
         iopt_prot = ConsiderProt.ALL.value
-    else: # consider_prot == 'None':
+    else:
         iopt_prot = ConsiderProt.NONE.value
 
     return ShortCircuitConfig(
@@ -220,26 +286,38 @@ def create_short_circuit_config(
 # APPLY FUNCTION
 # =============================================================================
 
-def apply_sc(comshc: pft.ComShc, bound: str, f_type: str, consider_prot: str,
-             location: Optional[pft.ElmTerm] = None, relative: int = 0) -> None:
+def apply_sc(
+    comshc: pft.ComShc,
+    bound: str,
+    f_type: str,
+    consider_prot: str,
+    location: Optional[pft.ElmTerm] = None,
+    relative: int = 0
+) -> None:
     """
     Configure PowerFactory short-circuit command with study parameters.
 
+    Creates a configuration using the factory function and applies all
+    settings to the provided ComShc command object.
+
     Args:
-        comshc: PowerFactory ComShc command object
-        bound: 'Max' or 'Min' for maximum/minimum fault level
-        f_type: '3-Phase', '2-Phase', 'Ground', 'Ground Z10', or 'Ground Z50'
-        consider_prot: 'None', 'All'
-        location: pft.ElmLne
-        relative: 0-99
+        comshc: PowerFactory ComShc command object to configure.
+        bound: 'Max' or 'Min' for maximum/minimum fault level.
+        f_type: Fault type - '3-Phase', '2-Phase', 'Ground',
+            'Ground Z10', or 'Ground Z50'.
+        consider_prot: 'None' or 'All' for protection consideration.
+        location: PowerFactory element for specific fault location.
+            None for all busbars calculation.
+        relative: Fault distance from terminal as percentage (0-99).
 
     Example:
-        ComShc = app.GetFromStudyCase("Short_Circuit.ComShc")
-        apply_sc(ComShc, 'Max', '3-Phase', 'All')
-        ComShc.Execute()
+        >>> comshc = app.GetFromStudyCase("Short_Circuit.ComShc")
+        >>> apply_sc(comshc, 'Max', '3-Phase', 'All')
+        >>> comshc.Execute()
     """
     config = create_short_circuit_config(
-        bound, f_type, consider_prot, location, relative)
+        bound, f_type, consider_prot, location, relative
+    )
 
     for attr_name, attr_value in config.as_dict().items():
         comshc.SetAttribute(attr_name, attr_value)
