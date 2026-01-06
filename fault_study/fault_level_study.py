@@ -15,7 +15,7 @@ import sys
 from typing import List, Dict, Union
 from pf_config import pft
 import pf_protection_helper as helper
-from fault_study import analysis, fault_impedance, floating_terminals as ft
+from fault_study import analysis, study_templates, fault_impedance, floating_terminals as ft
 import domain as dd
 from importlib import reload
 
@@ -293,6 +293,9 @@ def append_floating_terms(app: pft.Application, external_grid: Dict, devices: Li
 
             sect_terms = [device.sect_terms for device in devices if device.term == dev][0]
             sect_terms.append(termination)
+    # Reset short-circuit command module to default state.
+    comshc = app.GetFromStudyCase("Short_Circuit.ComShc")
+    study_templates.apply_sc(comshc, bound='Max', f_type='Ground', consider_prot='All')
 
 
 def grid_equivalance_check(new_grid_data: Dict) -> bool:
