@@ -1,155 +1,184 @@
-import powerfactory as pf
+"""
+Study type selection dialog for protection assessment.
+
+This module provides a GUI dialog for users to select which study types
+to execute. The available studies include fault level analysis, protection
+coordination, and conductor damage assessment.
+
+Functions:
+    get_study_selections: Display study selection dialog and return choices
+    exit_script: Clean exit handler for the GUI
+"""
+
+import sys
 import tkinter as tk
 from tkinter import ttk
 from typing import List
-import sys
+
 from pf_config import pft
 
 
-
-def get_study_selections(app: pft.Application) -> List:
+def get_study_selections(app: pft.Application) -> List[str]:
     """
-    User selects a study to undertake.
+    Display a dialog for selecting study types to execute.
+
+    Presents a GUI with checkboxes for each available study type.
+    The user can select one or more studies to run. Some studies
+    are mutually exclusive or have dependencies.
+
+    Available Study Types:
+        - Find PowerFactory Project: Locate project by substation
+        - Find Feeder Open Points: Identify normally-open points
+        - Fault Level Study (legacy): SEQ-specific legacy format
+        - Fault Level Study (no relays): Fault study without relay data
+        - Fault Level Study (all relays): Full protection assessment
+        - Conductor Damage Assessment: Thermal withstand evaluation
+        - Protection Relay Coordination Plot: Time-overcurrent curves
 
     Args:
-        app: PowerFactory application object
+        app: PowerFactory application instance.
 
     Returns:
-        list: A list of strings representing the selected study type and any
-              additional options. Returns empty list if no selection made.
+        List of selected study type strings.
 
-    Possible return values include:
-        - "Find PowerFactory Project"
-        - "Find Feeder Open Points"
-        - "Protection Assessment (Legacy)" (only available if region == "SEQ")
-        - "Protection Assessment (No Relays Configured In Model)"
-        - "Protection Assessment (All Relays Configured In Model)"
-        - "Conductor Damage Assessment" (only with All Relays option)
-        - "Protection Relay Coordination Plot" (only with All Relays option)
+    Note:
+        Conductor Damage Assessment and Protection Relay Coordination
+        Plot are only available when running with relay configuration.
+
+    Example:
+        >>> selections = get_study_selections(app)
+        >>> if "Fault Level Study (all relays)" in selections:
+        ...     # Run full protection assessment
     """
-
     root = tk.Tk()
-    root.title("Protection Assessment")
-    root.geometry("+800+200")
+    root.title("Protection Assessment - Study Selection")
 
-    # Variables for radio button and checkboxes
-    selection = tk.StringVar()
-    selection.set('var')
+    # Center the window on screen
+    window_width = 450
+    window_height = 400
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
 
-    conductor_damage_var = tk.BooleanVar(value=False)
-    coordination_plot_var = tk.BooleanVar(value=False)
+    # Main frame with padding
+    main_frame = ttk.Frame(root, padding="10")
+    main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
     # Header
-    ttk.Label(root, text="Select study to undertake:", font='Helvetica 14 bold'). \
-        grid(row=0, columnspan=3, sticky="w", padx=5, pady=5)
-
-    # Radio buttons for study selection
-    tk.Radiobutton(root, text="Find PowerFactory Project", value="0", variable=selection,
-                   command=lambda: on_radio_change()) \
-        .grid(row=1, column=0, sticky="w", padx=30, pady=5)
-    tk.Radiobutton(root, text="Find Feeder Open Points", value="1", variable=selection,
-                   command=lambda: on_radio_change()) \
-        .grid(row=2, column=0, sticky="w", padx=30, pady=5)
-
-    tk.Radiobutton(root, text="Fault Level Study (SEQ legacy script)", value="2", variable=selection,
-                   command=lambda: on_radio_change()) \
-        .grid(row=3, column=0, sticky="w", padx=30, pady=5)
-
-    tk.Radiobutton(root, text="Fault Level Study (No relays configured in model)", value="3", variable=selection,
-                   command=lambda: on_radio_change()) \
-        .grid(row=4, column=0, sticky="w", padx=30, pady=5)
-
-    tk.Radiobutton(root, text="Fault Level Study (All relays configured in model)", value="4", variable=selection,
-                   command=lambda: on_radio_change()) \
-        .grid(row=5, column=0, sticky="w", padx=30, pady=5)
-
-    # Conditional checkboxes (disabled by default)
-    conductor_damage_cb = tk.Checkbutton(
-        root,
-        text="Conductor Damage Assessment",
-        variable=conductor_damage_var,
-        state='disabled'
+    header = ttk.Label(
+        main_frame,
+        text="Select Study Type(s):",
+        font='Helvetica 14 bold'
     )
-    conductor_damage_cb.grid(row=6, column=0, sticky="w", padx=50, pady=2)
+    header.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
-    coordination_plot_cb = tk.Checkbutton(
-        root,
-        text="Protection Relay Coordination Plot",
-        variable=coordination_plot_var,
-        state='disabled'
+    # Study type definitions with descriptions
+    study_types = [
+        ("Find PowerFactory Project", "Locate project by substation acronym"),
+        ("Find Feeder Open Points", "Identify normally-open points on feeders"),
+        ("Fault Level Study (legacy)", "SEQ fault study with legacy output"),
+        (
+            "Fault Level Study (no relays configured in model)",
+            "Fault calculations at switch locations"
+        ),
+        (
+            "Fault Level Study (all relays configured in model)",
+            "Full protection assessment with relay data"
+        ),
+        ("Conductor Damage Assessment", "Thermal withstand evaluation"),
+        ("Protection Relay Coordination Plot", "Time-overcurrent curves"),
+    ]
+
+    # Create checkboxes for each study type
+    study_vars = {}
+    for i, (study_name, description) in enumerate(study_types):
+        var = tk.IntVar()
+        study_vars[study_name] = var
+
+        cb = ttk.Checkbutton(
+            main_frame,
+            text=study_name,
+            variable=var
+        )
+        cb.grid(row=i + 1, column=0, sticky="w", padx=(20, 0), pady=2)
+
+    # Separator
+    separator = ttk.Separator(main_frame, orient='horizontal')
+    separator.grid(
+        row=len(study_types) + 1,
+        column=0,
+        columnspan=2,
+        sticky="ew",
+        pady=10
     )
-    coordination_plot_cb.grid(row=7, column=0, sticky="w", padx=50, pady=2)
 
-    def on_radio_change():
-        """Enable/disable checkboxes based on radio button selection"""
-        if selection.get() == "4":  # "Protection Assessment (All Relays Configured In Model)"
-            conductor_damage_cb.config(state='normal')
-            coordination_plot_cb.config(state='normal')
-        else:
-            # Disable and untick checkboxes
-            conductor_damage_var.set(False)
-            coordination_plot_var.set(False)
-            conductor_damage_cb.config(state='disabled')
-            coordination_plot_cb.config(state='disabled')
+    # Note about optional assessments
+    note_text = (
+        "Note: Conductor Damage Assessment and Coordination Plots\n"
+        "require 'Fault Level Study (all relays configured)' to be selected."
+    )
+    note_label = ttk.Label(
+        main_frame,
+        text=note_text,
+        font=('TkDefaultFont', 9),
+        foreground='gray'
+    )
+    note_label.grid(
+        row=len(study_types) + 2,
+        column=0,
+        columnspan=2,
+        sticky="w",
+        pady=(0, 10)
+    )
 
-    # Information frame with light border
-    info_frame = ttk.LabelFrame(root, text="Information", padding=(10, 5))
-    info_frame.grid(row=8, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+    # Button frame
+    button_frame = ttk.Frame(main_frame)
+    button_frame.grid(
+        row=len(study_types) + 3,
+        column=0,
+        columnspan=2,
+        sticky="e",
+        pady=(10, 0)
+    )
 
-    info_text = "At script completion, the location of saved study results files\nwill be displayed in the PowerFactory output window."
-    ttk.Label(info_frame, text=info_text, font=('Helvetica', 9)).pack(anchor="w")
+    ttk.Button(
+        button_frame,
+        text='Okay',
+        command=lambda: root.destroy()
+    ).grid(row=0, column=0, padx=5)
 
-    # Buttons
-    ttk.Button(root, text='Okay', command=lambda: root.destroy()) \
-        .grid(row=9, column=0, sticky="w", padx=5, pady=5)
-    ttk.Button(root, text='Exit', command=lambda: exit_script(root, app)) \
-        .grid(row=9, column=1, sticky="w", padx=5, pady=5)
+    ttk.Button(
+        button_frame,
+        text='Exit',
+        command=lambda: exit_script(root, app)
+    ).grid(row=0, column=1, padx=5)
 
-    # Run the interface
+    # Run the dialog
     root.mainloop()
 
-    # Mapping of radio button values to study names
-    study_mapping = {
-        "0": "Find PowerFactory Project",
-        "1": "Find Feeder Open Points",
-        "2": "Fault Level Study (legacy)",
-        "3": "Fault Level Study (no relays configured in model)",
-        "4": "Fault Level Study (all relays configured in model)"
-    }
+    # Collect selected studies
+    selected_studies = [
+        study_name
+        for study_name, var in study_vars.items()
+        if var.get() == 1
+    ]
 
-    # Build the return list based on selections
-    result = []
-
-    if selection.get() != 'var':
-        # Add the selected study type
-        study_name = study_mapping.get(selection.get())
-        if study_name:
-            result.append(study_name)
-
-        # Add checkbox selections (only relevant for "All Relays" option)
-        if selection.get() == "4":
-            if conductor_damage_var.get():
-                result.append("Conductor Damage Assessment")
-            if coordination_plot_var.get():
-                result.append("Protection Relay Coordination Plot")
-    else:
-        # No selection made, prompt user
-        result = no_study_selected(app)
-
-    return result
+    return selected_studies
 
 
-def exit_script(root, app: pft.Application):
-    """Exits script"""
+def exit_script(root: tk.Tk, app: pft.Application) -> None:
+    """
+    Clean exit handler for the study selection dialog.
 
+    Prints a termination message to PowerFactory output and exits
+    the script cleanly.
+
+    Args:
+        root: The tkinter root window to destroy.
+        app: PowerFactory application instance for output messages.
+    """
     app.PrintPlain("User terminated script.")
     root.destroy()
     sys.exit(0)
-
-
-def no_study_selected(app: pft.Application) -> List:
-    """Ensure the user selects a study before continuing"""
-
-    app.PrintPlain("Please select a study to continue")
-    study = get_study_selections(app)
-    return study

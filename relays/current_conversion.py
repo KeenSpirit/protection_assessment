@@ -3,28 +3,30 @@ Current conversion utilities for relay analysis.
 
 This module provides functions to convert fault currents to the values
 seen by different relay measurement types (3I0, I2, etc.).
+
+Functions:
+    get_measured_current: Convert fault current to measurement type
+    convert_to_i2: Convert to negative sequence current
+    convert_to_i0: Convert to zero sequence current
 """
 
 
-def get_measured_current(
-    element,
-    fault_level: float,
-    fault_type: str
-) -> float:
+def get_measured_current(element, fault_level: float, fault_type: str) -> float:
     """
     Calculate the current seen by a relay element for a given fault.
 
-    Different relay measurement types see different currents for the same
-    fault. This function converts the fault current to what the specific
-    element's measurement type would see.
+    Different relay measurement types see different currents for the
+    same fault. This function converts the fault current to what the
+    specific element's measurement type would see.
 
     Args:
-        element: relay element (RelToc or RelIoc) with typ_id attribute
-        fault_level: Fault current magnitude in Amperes
-        fault_type: Type of fault ('3-Phase', '2-Phase', 'Phase-Ground')
+        element: Relay element (RelToc or RelIoc) with typ_id attribute.
+        fault_level: Fault current magnitude in Amperes.
+        fault_type: Type of fault ('3-Phase', '2-Phase', 'Phase-Ground').
 
     Returns:
-        Current value in Amperes as seen by the element's measurement type
+        Current value in Amperes as seen by the element's measurement
+        type.
 
     Measurement Type Mapping:
         - '3ph', 'd3m': 3-phase current (direct)
@@ -81,9 +83,9 @@ def convert_to_i2(
     approximately 180 degrees apart for 2-phase faults.
 
     Args:
-        fault_current: Phase fault current magnitude in Amperes
-        fault_type: Type of fault ('3-Phase', '2-Phase', 'Phase-Ground')
-        threei2: If True, return 3*I2 instead of I2
+        fault_current: Phase fault current magnitude in Amperes.
+        fault_type: Type of fault ('3-Phase', '2-Phase', 'Phase-Ground').
+        threei2: If True, return 3*I2 instead of I2.
 
     Returns:
         Negative sequence current (or 3*I2) in Amperes.
@@ -117,12 +119,10 @@ def convert_to_i2(
     a2 = complex(-0.5, -0.866)  # 240° rotation operator
 
     # Calculate sequence component products
-    aib = ib * a
     a2ib = ib * a2
     aic = ic * a
-    a2ic = ic * a2
 
-    # Negative sequence current
+    # Negative sequence current: I2 = (Ia + a²Ib + aIc) / 3
     ia2 = (ia + a2ib + aic) / 3
     ib2 = ia2 * a
     ic2 = ia2 * a2
@@ -150,11 +150,11 @@ def convert_to_i0(fault_current: float, threei0: bool = False) -> float:
     divided equally among the three phases.
 
     Args:
-        fault_current: Earth fault current magnitude in Amperes
-        threei0: If True, return 3*I0 instead of I0
+        fault_current: Earth fault current magnitude in Amperes.
+        threei0: If True, return 3*I0 instead of I0.
 
     Returns:
-        Zero sequence current (or 3*I0) in Amperes
+        Zero sequence current (or 3*I0) in Amperes.
 
     Theory:
         For a single-phase-to-ground fault: Ia=If, Ib=0, Ic=0
