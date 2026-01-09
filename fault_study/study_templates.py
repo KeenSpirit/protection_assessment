@@ -33,14 +33,12 @@ from pf_config import pft
 
 class SCMethod(Enum):
     """Short-circuit calculation method."""
-
     IEC60909 = 1
     Complete = 3
 
 
 class FaultType(Enum):
-    """PowerFactory fault type codes for ComShc.iopt_shc attribute."""
-
+    """PowerFactory fault type codes."""
     THREE_PHASE = '3psc'
     TWO_PHASE = '2psc'
     PHASE_TO_GROUND = 'spgf'
@@ -50,14 +48,12 @@ class FaultType(Enum):
 
 class CalculationBound(Enum):
     """Maximum or minimum fault level calculation."""
-
     MAXIMUM = 0
     MINIMUM = 1
 
 
 class ProtTrippingCurrent(Enum):
     """Protection tripping current calculation mode."""
-
     SUB_TRANSIENT = 0
     TRANSIENT = 1
     MIXED_MODE = 2
@@ -65,7 +61,6 @@ class ProtTrippingCurrent(Enum):
 
 class EvtShcType(Enum):
     """Event short-circuit type codes."""
-
     THREE_PHASE = 0
     TWO_PHASE = 1
     PHASE_TO_GROUND = 2
@@ -73,15 +68,13 @@ class EvtShcType(Enum):
 
 
 class ConsiderProt(Enum):
-    """Consider protection devices in calculation."""
-
+    """Consider Protection Devices."""
     NONE = 0
     ALL = 1
 
 
 class FaultLocation(Enum):
-    """Fault location selection mode."""
-
+    """Consider Protection Devices."""
     USER_SELECTION = 0
     BUSBARS_JUNCTIONS = 1
 
@@ -142,13 +135,13 @@ class ShortCircuitConfig:
     Rf: float = 0.0
     Xf: float = 0.0
     iopt_allbus: int = FaultLocation.BUSBARS_JUNCTIONS.value
-    iopt_prot: int = ConsiderProt.ALL.value
+    iopt_prot: int = ConsiderProt.ALL.value # Consider all protection devices
     # Optional fields for specific fault types
-    i_p2psc: int = 0
-    i_pspgf: int = 0
-    iopt_dfr: int = 0
-    shcobj: Optional[pft.ElmLne] = None
-    ppro: int = 1
+    i_p2psc: int = 0  # Used for 3-phase and 2-phase minimum faults
+    i_pspgf: int = 0  # Used for ground faults
+    iopt_dfr: int = 0  # Used for User Selection; Terminal i or Terminal j
+    shcobj: Optional[pft.ElmLne] = None  # Used for User Selection
+    ppro: int = 1  # Used for User Selection; Fault Distance from Terminal i
 
     def as_dict(self) -> Dict[str, Any]:
         """
@@ -178,8 +171,6 @@ class ShortCircuitConfig:
             if self.iopt_shc in (
                     FaultType.THREE_PHASE.value, FaultType.TWO_PHASE.value):
                 result['i_p2psc'] = self.i_p2psc
-
-        # Add location-specific fields
         if self.iopt_allbus == FaultLocation.USER_SELECTION.value:
             result['iopt_dfr'] = self.iopt_dfr
             result['shcobj'] = self.shcobj
@@ -189,7 +180,7 @@ class ShortCircuitConfig:
 
 
 # =============================================================================
-# FACTORY FUNCTION
+# FACTORY FUNCTION TO CREATE CONFIGURATIONS
 # =============================================================================
 
 def create_short_circuit_config(
@@ -254,7 +245,6 @@ def create_short_circuit_config(
     else:
         raise ValueError(f"Unknown fault type: {fault_type}")
 
-    # Determine fault location settings
     if location is not None:
         iopt_allbus = 0
         shcobj = location
@@ -264,10 +254,9 @@ def create_short_circuit_config(
         shcobj = None
         ppro = 0
 
-    # Determine protection consideration
     if consider_prot == 'All':
         iopt_prot = ConsiderProt.ALL.value
-    else:
+    else: # consider_prot == 'None':
         iopt_prot = ConsiderProt.NONE.value
 
     return ShortCircuitConfig(

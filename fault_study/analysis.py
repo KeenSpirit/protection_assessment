@@ -11,11 +11,9 @@ Functions:
 """
 
 from typing import Optional
-
 from pf_config import pft
 from fault_study import study_templates
 from importlib import reload
-
 reload(study_templates)
 
 
@@ -128,3 +126,4 @@ def get_line_current(elmlne: pft.ElmLne) -> Optional[float]:
         ])
 
     return round(max(currents) * 1000) if currents else None
+

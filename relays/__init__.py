@@ -1,30 +1,30 @@
 """
-Relay analysis package for PowerFactory protection assessment.
+Relay analysis package.
 
-This package provides protection device analysis functionality including
-relay element retrieval, current conversion, auto-reclose management,
-and reach factor calculations.
+This package provides protection device analysis functionality split into
+focused modules:
 
-Modules:
-    elements: Relay/fuse retrieval and element filtering
-    current_conversion: Fault current to measurement type conversion
-    reclose: Auto-reclose sequence management
-    reach_factors: Protection reach factor calculations
+- elements: Relay/fuse retrieval and element filtering
+- current_conversion: Fault current to measurement type conversion
+- reclose: Auto-reclose sequence management
+- reach_factors: relay reach factor calculations
 
-Usage (targeted imports):
+For backward compatibility, all functions are re-exported at the package level.
+
+Usage (new style - targeted imports):
     from relays.elements import get_all_relays, get_prot_elements
     from relays.reach_factors import device_reach_factors
 
 Usage (backward compatible):
-    from relays import get_all_relays, device_reach_factors
+    from relay import get_all_relays, device_reach_factors
     # or
     import relays
-    all_relays = relays.get_all_relays(app)
+    relays = relays.get_all_relays(app)
 """
 
-# ============================================================================
+# =============================================================================
 # ELEMENT RETRIEVAL AND FILTERING
-# ============================================================================
+# =============================================================================
 
 from relays.elements import (
     get_all_relays,
@@ -32,9 +32,9 @@ from relays.elements import (
     get_active_elements,
 )
 
-# ============================================================================
+# =============================================================================
 # CURRENT CONVERSION
-# ============================================================================
+# =============================================================================
 
 from relays.current_conversion import (
     get_measured_current,
@@ -42,9 +42,9 @@ from relays.current_conversion import (
     convert_to_i0,
 )
 
-# ============================================================================
+# =============================================================================
 # AUTO-RECLOSE SEQUENCE MANAGEMENT
-# ============================================================================
+# =============================================================================
 
 from relays.reclose import (
     get_device_trips,
@@ -54,9 +54,9 @@ from relays.reclose import (
     reset_block_service_status,
 )
 
-# ============================================================================
+# =============================================================================
 # REACH FACTOR CALCULATIONS
-# ============================================================================
+# =============================================================================
 
 from relays.reach_factors import (
     device_reach_factors,
@@ -64,9 +64,9 @@ from relays.reach_factors import (
     swer_transform,
 )
 
-# ============================================================================
+# =============================================================================
 # PUBLIC API
-# ============================================================================
+# =============================================================================
 
 __all__ = [
     # elements

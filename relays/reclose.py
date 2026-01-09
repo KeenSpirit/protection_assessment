@@ -30,10 +30,10 @@ def get_device_trips(device: Union["pft.ElmRelay", "pft.RelFuse"]) -> int:
     auto-reclose, returns 1.
 
     Args:
-        device: PowerFactory protection device (ElmRelay or RelFuse).
+        device: PowerFactory protection device (ElmRelay or RelFuse)
 
     Returns:
-        Number of trips in the protection sequence (1 to N).
+        Number of trips in the protection sequence (1 to N)
 
     Example:
         >>> trips = get_device_trips(relay)
@@ -63,7 +63,7 @@ def reset_reclosing(elmrelay: "pft.ElmRelay") -> None:
     for a new fault analysis sequence from the first trip.
 
     Args:
-        elmrelay: PowerFactory ElmRelay object.
+        elmrelay: PowerFactory ElmRelay object
 
     Note:
         Only affects ElmRelay objects. Has no effect on fuses.
@@ -86,9 +86,9 @@ def trip_count(
     Get or increment the current trip number in the auto-reclose sequence.
 
     Args:
-        device: PowerFactory protection device (ElmRelay or RelFuse).
+        device: PowerFactory protection device (ElmRelay or RelFuse)
         increment: If True, increment the trip counter before returning.
-            If False, return the current trip number.
+                   If False, return the current trip number.
 
     Returns:
         The trip number (after incrementing if requested).
@@ -131,11 +131,11 @@ def set_enabled_elements(
     the recloser type and sets element out-of-service status accordingly.
 
     Args:
-        device: PowerFactory protection device (ElmRelay or RelFuse).
+        device: PowerFactory protection device (ElmRelay or RelFuse)
 
     Returns:
-        Dictionary mapping element objects to their original outserv
-        status, allowing later restoration via reset_block_service_status.
+        Dictionary mapping element objects to their original outserv status,
+        allowing later restoration via reset_block_service_status().
         Returns None if device has no recloser or is a fuse.
 
     Block Logic Values:
@@ -203,9 +203,9 @@ def reset_block_service_status(block_service_status: Optional[Dict]) -> None:
     element to its previous outserv state.
 
     Args:
-        block_service_status: Dictionary from set_enabled_elements()
-            mapping elements to their original outserv values.
-            If None, no action is taken.
+        block_service_status: Dictionary from set_enabled_elements() mapping
+                              elements to their original outserv values.
+                              If None, no action is taken.
 
     Example:
         >>> original = set_enabled_elements(relay)

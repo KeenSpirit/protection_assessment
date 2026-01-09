@@ -27,10 +27,10 @@ def get_all_relays(app: "pft.Application") -> List["pft.ElmRelay"]:
     - Not out of service
 
     Args:
-        app: PowerFactory application instance.
+        app: PowerFactory application instance
 
     Returns:
-        List of ElmRelay objects meeting all filter criteria.
+        List of ElmRelay objects meeting all filter criteria
 
     Example:
         >>> relays = get_all_relays(app)
@@ -56,14 +56,14 @@ def get_prot_elements(
     """
     Retrieve all active relay elements from a relay device.
 
-    Extracts time overcurrent (RelToc) and instantaneous overcurrent
-    (RelIoc) elements, categorizing them by relay function:
+    Extracts time overcurrent (RelToc) and instantaneous overcurrent (RelIoc)
+    elements, categorizing them by relay function:
     - oc_*: Phase overcurrent elements
     - ef_*: Earth fault elements
     - nps_*: Negative phase sequence elements
 
     Args:
-        device_pf: PowerFactory ElmRelay object.
+        device_pf: PowerFactory ElmRelay object
 
     Returns:
         Dictionary with keys:
@@ -76,8 +76,7 @@ def get_prot_elements(
 
     Example:
         >>> elements = get_prot_elements(relay)
-        >>> ef_count = len(elements['ef_idmt_elements'])
-        >>> print(f"Found {ef_count} EF IDMT elements")
+        >>> print(f"Found {len(elements['ef_idmt_elements'])} EF IDMT elements")
     """
     # Get all IDMT elements that are in service
     idmt_elements = [
@@ -147,11 +146,11 @@ def get_prot_elements(
 
 
 def get_active_elements(
-    elements: Dict[str, List[Union["pft.RelToc", "pft.RelIoc"]]],
+    elements: Dict[str, Union["pft.RelToc", "pft.RelIoc"]],
     fault_type: str
 ) -> List[Union["pft.RelToc", "pft.RelIoc"]]:
     """
-    Filter relay elements to those capable of detecting a fault type.
+    Filter relay elements to those capable of detecting a specific fault type.
 
     Different fault types are detected by different element combinations:
     - 3-Phase: Only phase overcurrent elements
@@ -159,11 +158,11 @@ def get_active_elements(
     - Phase-Ground: All elements (phase, earth, negative sequence)
 
     Args:
-        elements: Dictionary of relay elements from get_prot_elements().
-        fault_type: One of '3-Phase', '2-Phase', or 'Phase-Ground'.
+        elements: Dictionary of relay elements from get_prot_elements()
+        fault_type: One of '3-Phase', '2-Phase', or 'Phase-Ground'
 
     Returns:
-        List of relay elements capable of detecting the fault type.
+        List of relay elements capable of detecting the fault type
 
     Example:
         >>> elements = get_prot_elements(relay)

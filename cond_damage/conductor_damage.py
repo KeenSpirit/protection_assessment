@@ -26,13 +26,8 @@ import math
 from typing import Dict, List, Optional, Tuple, Any
 
 from pf_config import pft
-from domain.enums import ElementType
 from relays import current_conversion, elements, reclose
-from importlib import reload
-
-reload(reclose)
-reload(elements)
-reload(current_conversion)
+from domain.enums import ElementType
 
 
 # =============================================================================
@@ -87,9 +82,33 @@ def cond_damage(app: pft.Application, devices: List) -> None:
         )
 
         for line in lines:
-            _assess_line_phase_damage(
-                app, device, line, fl_step, fault_type, total_trips
-            )
+            reclose.reset_reclosing(dev_obj)
+            trip_count = 1
+            total_energy = 0
+
+            while trip_count <= total_trips:
+                block_service_status = reclose.set_enabled_elements(dev_obj)
+                min_fl_clear_times, _ = fault_clear_times(
+                    app, device, line, fl_step, fault_type
+                )
+                max_energy, max_fl, max_clear_time = worst_case_energy(
+                    line, min_fl_clear_times, fault_type, device,False
+                )
+
+                reclose.reset_block_service_status(block_service_status)
+                trip_count  = reclose.trip_count(dev_obj, increment=True)
+                total_energy += max_energy
+
+                if max_clear_time is not None:
+                    line.ph_clear_time = max_clear_time
+                    line.ph_fl = max_fl
+                else:
+                    logging.info(
+                        f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
+                                 f"fault clearing time calculation error."
+                    )
+
+            line.ph_energy = total_energy
 
         # Earth fault assessment
         line_fault_type = 'Phase-Ground'
@@ -97,120 +116,37 @@ def cond_damage(app: pft.Application, devices: List) -> None:
             f"Performing earth fault conductor damage assessment "
             f"for {dev_obj.loc_name}..."
         )
-
         for line in lines:
-            _assess_line_earth_damage(
-                app, device, line, fl_step, line_fault_type, total_trips
-            )
+            reclose.reset_reclosing(dev_obj)
+            trip_count = 1
+            total_energy = 0
+            while trip_count <= total_trips:
+                block_service_status = reclose.set_enabled_elements(dev_obj)
+                min_fl_clear_times, device_fault_type = fault_clear_times(
+                    app, device, line, fl_step, line_fault_type
+                )
 
+                # Check if SWER transformation was applied
+                transposition = (line_fault_type != device_fault_type)
 
-def _assess_line_phase_damage(
-    app: pft.Application,
-    device: Any,
-    line: Any,
-    fl_step: int,
-    fault_type: str,
-    total_trips: int
-) -> None:
-    """
-    Assess phase fault conductor damage for a single line.
+                max_energy, max_fl, max_clear_time = worst_case_energy(
+                    line, min_fl_clear_times, fault_type, device, transposition
+                )
 
-    Args:
-        app: PowerFactory application instance.
-        device: Device dataclass containing the protection device.
-        line: Line dataclass to assess.
-        fl_step: Fault level step size in Amperes.
-        fault_type: Fault type string ('2-Phase').
-        total_trips: Total number of trips in auto-reclose sequence.
-    """
-    dev_obj = device.obj
-    reclose.reset_reclosing(dev_obj)
-    trip_count = 1
-    total_energy = 0
+                reclose.reset_block_service_status(block_service_status)
+                trip_count  = reclose.trip_count(dev_obj, increment=True)
+                total_energy += max_energy
 
-    while trip_count <= total_trips:
-        block_service_status = reclose.set_enabled_elements(dev_obj)
+                if max_clear_time is not None:
+                    line.pg_clear_time = max_clear_time
+                    line.pg_fl = max_fl
+                else:
+                    logging.info(
+                        f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
+                                 f"fault clearing time calculation error."
+                    )
 
-        min_fl_clear_times, _ = fault_clear_times(
-            app, device, line, fl_step, fault_type
-        )
-        max_energy, max_fl, max_clear_time = worst_case_energy(
-            line, min_fl_clear_times, fault_type, device, transposition=False
-        )
-
-        reclose.reset_block_service_status(block_service_status)
-        trip_count = reclose.trip_count(dev_obj, increment=True)
-        total_energy += max_energy
-
-        if max_clear_time is not None:
-            line.ph_clear_time = max_clear_time
-            line.ph_fl = max_fl
-        else:
-            logging.info(
-                f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
-                f"fault clearing time calculation error."
-            )
-
-    line.ph_energy = total_energy
-
-
-def _assess_line_earth_damage(
-    app: pft.Application,
-    device: Any,
-    line: Any,
-    fl_step: int,
-    line_fault_type: str,
-    total_trips: int
-) -> None:
-    """
-    Assess earth fault conductor damage for a single line.
-
-    Handles SWER transformation when a multi-phase device protects
-    a single-phase SWER line section.
-
-    Args:
-        app: PowerFactory application instance.
-        device: Device dataclass containing the protection device.
-        line: Line dataclass to assess.
-        fl_step: Fault level step size in Amperes.
-        line_fault_type: Fault type string ('Phase-Ground').
-        total_trips: Total number of trips in auto-reclose sequence.
-    """
-    dev_obj = device.obj
-    fault_type = '2-Phase'  # For energy calculation reference
-
-    reclose.reset_reclosing(dev_obj)
-    trip_count = 1
-    total_energy = 0
-
-    while trip_count <= total_trips:
-        block_service_status = reclose.set_enabled_elements(dev_obj)
-
-        min_fl_clear_times, device_fault_type = fault_clear_times(
-            app, device, line, fl_step, line_fault_type
-        )
-
-        # Check if SWER transformation was applied
-        transposition = (line_fault_type != device_fault_type)
-
-        max_energy, max_fl, max_clear_time = worst_case_energy(
-            line, min_fl_clear_times, fault_type, device, transposition
-        )
-
-        reclose.reset_block_service_status(block_service_status)
-        trip_count = reclose.trip_count(dev_obj, increment=True)
-        total_energy += max_energy
-
-        if max_clear_time is not None:
-            line.pg_clear_time = max_clear_time
-            line.pg_fl = max_fl
-        else:
-            logging.info(
-                f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
-                f"fault clearing time calculation error."
-            )
-
-    line.pg_energy = total_energy
+            line.pg_energy = total_energy
 
 
 # =============================================================================
@@ -247,85 +183,68 @@ def fault_clear_times(
         For phase faults, uses 2-phase minimum and maximum of 2ph/3ph.
         For earth faults, applies SWER transformation if applicable.
     """
+
     if fault_type in ['2-Phase', '3-Phase']:
         min_fl = line.min_fl_2ph
         max_fl = max(line.max_fl_2ph, line.max_fl_3ph)
     else:
-        # Check for SWER transformation
+        # Check if this is a SWER line,
+        # and does the device see the same current?
         min_fl, max_fl, fault_type = swer_transform(
-            app, device, line, fault_type
+            device, line, fault_type
         )
 
     device_obj = device.obj
+    # Create a list of fault levels in the interval of min and max fault
+    # currents. Two intervals may be assessed:
+    # fl_interval_1 is composed of equidistant step sizes between
+    # min fault level and max fault level
+    # fl_interval_2 is composed of only the element hisets between
+    # min fault level and max fault level
 
     # Create fault level range
-    fl_interval = range(min_fl, max_fl + 1, fl_step)
+    fl_interval_1 = range(min_fl, max_fl + 1, fl_step)
+    # Initialise fl_interval_2
+    # fl_interval_2 = [min_fl, max_fl]
 
-    # Get active protection elements for this fault type
+    # Select only the elements capable of detecting the fault type
+    # and enabled for the current auto-reclose iteration
     if device_obj.GetClassName() == ElementType.FUSE.value:
         active_elements = [device_obj]
     else:
         all_elements = elements.get_prot_elements(device_obj)
         active_elements = elements.get_active_elements(all_elements, fault_type)
+        # hisets = [
+        #     element.GetAttribute("e:cpIpset") - 1 for element in active_elements
+        #           if element.GetClassName() == 'RelIoc']
+        # fl_interval_2 = fl_interval_2 + hisets
 
-    # Calculate minimum clearing time for each fault level
-    min_fl_clear_times = {fault_level: None for fault_level in fl_interval}
-
+    # Initialise fault level:min operating time dictionary
+    min_fl_clear_times = {fault_level: None for fault_level in fl_interval_1}
     for element in active_elements:
-        for fault_level in fl_interval:
-            clear_time = _calculate_element_clear_time(
-                element, fault_level, fault_type
-            )
-
-            if clear_time is None or clear_time <= 0:
+        for fault_level in fl_interval_1:
+            # Calculate protection operate time for element and fl
+            if element.GetClassName() == ElementType.FUSE.value:
+                operate_time = fuse_clear_time(element, fault_level)
+                switch_operate_time = 0
+            else:
+                element_current = current_conversion.get_measured_current(
+                    element, fault_level, fault_type)
+                operate_time = element_trip_time(element, element_current)
+                switch_operate_time = 0.08
+            if not operate_time or operate_time <= 0:
                 continue
-
-            # Update if this is the minimum clearing time
-            current_min = min_fl_clear_times[fault_level]
-            if current_min is None or clear_time < current_min:
+            clear_time = operate_time + switch_operate_time
+            # If this is the minimum fault clear time for that fault level,
+            # update the dictionary accordingly
+            if (min_fl_clear_times[fault_level] is None
+                    or clear_time < min_fl_clear_times[fault_level]):
                 min_fl_clear_times[fault_level] = round(clear_time, 3)
 
     return min_fl_clear_times, fault_type
 
 
-def _calculate_element_clear_time(
-    element: Any,
-    fault_level: int,
-    fault_type: str
-) -> Optional[float]:
-    """
-    Calculate clearing time for a single protection element.
-
-    Args:
-        element: Protection element (RelFuse, RelToc, or RelIoc).
-        fault_level: Fault current in Amperes.
-        fault_type: Fault type string for current conversion.
-
-    Returns:
-        Total clearing time in seconds, or None if element doesn't operate.
-    """
-    if element.GetClassName() == ElementType.FUSE.value:
-        operate_time = fuse_clear_time(element, fault_level)
-        switch_operate_time = 0
-    else:
-        element_current = current_conversion.get_measured_current(
-            element, fault_level, fault_type
-        )
-        operate_time = element_trip_time(element, element_current)
-        switch_operate_time = 0.08  # 80ms breaker time
-
-    if not operate_time or operate_time <= 0:
-        return None
-
-    return operate_time + switch_operate_time
-
-
-# =============================================================================
-# SWER TRANSFORMATION
-# =============================================================================
-
 def swer_transform(
-    app: pft.Application,
     device: Any,
     line: Any,
     fault_type: str
@@ -351,6 +270,7 @@ def swer_transform(
         - Maximum fault level (transformed if SWER)
         - Fault type ('2-Phase' if transformed, original otherwise)
     """
+
     min_fl = line.min_fl_2ph
     max_fl = max(line.max_fl_2ph, line.max_fl_3ph)
 
@@ -431,9 +351,6 @@ def worst_case_energy(
     return max_energy, max_fl, max_clear_time
 
 
-# =============================================================================
-# FUSE CLEARING TIME
-# =============================================================================
 
 def fuse_clear_time(fuse: Any, flt_cur: float) -> Optional[float]:
     """
@@ -456,11 +373,15 @@ def fuse_clear_time(fuse: Any, flt_cur: float) -> Optional[float]:
         Fuse curves are read from the TypFuse melt characteristic.
         The function uses linear interpolation between curve points.
     """
+
     op_time = None
 
     type_fuse = fuse.GetAttribute("e:typ_id")
+    # melt curve
     typechatoc = type_fuse.GetAttribute("e:pmelt")
+    # curve type
     curve_type = typechatoc.GetAttribute("e:i_type")
+    # curve equation variables
     curve_var = typechatoc.GetAttribute("e:vmat")
     number_of_rows = len(curve_var)
 

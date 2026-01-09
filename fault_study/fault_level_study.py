@@ -85,8 +85,8 @@ def fault_study(
         ('Min', 'Ground Z10'), ('Min', 'Ground Z50'),
     ]
     sn_study_configs = [
-        ('Min', '2-Phase'), ('Min', 'Ground'),
-        ('Min', 'Ground Z10'), ('Min', 'Ground Z50'),
+        ('Min', '2-Phase'), ('Min', 'Ground'), ('Min', 'Ground Z10'),
+        ('Min', 'Ground Z50'),
     ]
 
     # Determine protection consideration mode
@@ -115,9 +115,7 @@ def fault_study(
 
     # Handle floating terminals
     floating_terms = ft.get_floating_terminals(feeder.obj, feeder.devices)
-    append_floating_terms(
-        app, external_grid, feeder.devices, floating_terms, consider_prot
-    )
+    append_floating_terms(app, external_grid, feeder.devices, floating_terms, consider_prot)
 
     # Update device and line data with results
     update_device_data(region, feeder.devices)
@@ -174,16 +172,12 @@ def get_downstream_objects(
 
             if class_name == dd.ElementType.TERM.value and obj.uknom > 1:
                 terminals.append(obj)
-
             if class_name == dd.ElementType.LOAD.value and region == 'SEQ':
                 loads.append(obj)
-
-            if class_name == dd.ElementType.TFMR.value:
-                if region == 'Regional Models':
-                    load_type = obj.typ_id
-                    if "Regulators" not in load_type.GetFullName():
-                        loads.append(obj)
-
+            if class_name == dd.ElementType.TFMR.value and region == 'Regional Models':
+                load_type = obj.typ_id
+                if "Regulators" not in load_type.GetFullName():
+                    loads.append(obj)
             if class_name == dd.ElementType.LINE.value:
                 lines.append(obj)
 
@@ -481,8 +475,8 @@ def grid_equivalance_check(new_grid_data: Dict) -> bool:
     """
     identical_grids = True
     for grid, attributes in new_grid_data.items():
-        for i in range(5, 10):
-            if attributes[i] != attributes[i + 5]:
+        for i in range (5, 10):
+            if attributes[i] != attributes[i+5]:
                 identical_grids = False
                 break
     return identical_grids

@@ -13,15 +13,14 @@ Functions:
     determine_fuse_type: Determine if a fuse is a line fuse
 """
 
+
 from importlib import reload
-import sys
-from typing import List, Optional, Union
-
 from pf_config import pft
-import pf_protection_helper as helper
-from devices import fuse_mapping as fm
-import domain as dd
+from typing import Optional, List
 
+from devices import fuse_mapping as fm
+import pf_protection_helper as helper
+import domain as dd
 reload(fm)
 reload(dd)
 
@@ -68,10 +67,10 @@ def get_all_fuses(app: pft.Application) -> List[pft.RelFuse]:
 
 
 def create_fuse(
-    app: pft.Application,
-    ds_tr: Optional[dd.Tfmr],
-    tr_term_dataclass: dd.Termination,
-    sys_volts: str
+        app: pft.Application,
+        ds_tr: Optional[dd.Tfmr],
+        tr_term_dataclass: dd.Termination,
+        sys_volts: str
 ) -> List[pft.RelFuse]:
     """
     Create a fuse element for a distribution transformer.
@@ -123,10 +122,10 @@ def create_fuse(
 
 
 def get_fuse_element(
-    app: pft.Application,
-    tfmr: dd.Tfmr,
-    tr_term_dataclass: dd.Termination,
-    system_volts: str
+        app: pft.Application,
+        tfmr: dd.Tfmr,
+        tr_term_dataclass: dd.Termination,
+        system_volts: str
 ) -> Optional[pft.TypFuse]:
     """
     Match a transformer to the appropriate fuse type.
@@ -157,6 +156,7 @@ def get_fuse_element(
         SEQ models use Energex fuse mapping tables.
         Regional models use Ergon Energy fuse mapping tables.
     """
+
     def _safe_string(dic, key):
         """Safely retrieve fuse string from mapping dictionary."""
         try:
@@ -168,214 +168,83 @@ def get_fuse_element(
     fuse_object = None
     region = helper.obtain_region(app)
     term = tr_term_dataclass
-
     if region == 'SEQ':
-        fuse_object = _get_seq_fuse(app, tfmr, term, _safe_string)
-    else:
-        # region == 'Regional Models'
-        fuse_object = _get_regional_fuse(
-            app, tfmr, term, system_volts, _safe_string
-        )
-
-    return fuse_object
-
-
-def _get_seq_fuse(
-    app: pft.Application,
-    tfmr: dd.Tfmr,
-    term: dd.Termination,
-    safe_string_fn
-) -> Optional[pft.TypFuse]:
-    """
-    Get fuse type for SEQ (Energex) region.
-
-    Args:
-        app: PowerFactory application instance.
-        tfmr: Transformer dataclass.
-        term: Termination dataclass.
-        safe_string_fn: Function to safely retrieve from dict.
-
-    Returns:
-        TypFuse object or None.
-    """
-    fuse_object = None
-    fuse_string = None
-
-    if term.constr == dd.ConstructionType.SWER.value:
-        fuse_string = safe_string_fn(fm.ex_SWER_f_sizes, tfmr.load_kva)
-        fuse_types = f_types(app, 0)
-    elif term.constr == dd.ConstructionType.OVERHEAD.value:
-        # OH fuse
-        if term.phases == 1:
-            fuse_string = safe_string_fn(fm.ex_pole_1p_fuses, tfmr.load_kva)
-        else:
-            fuse_string = safe_string_fn(fm.ex_pole_3p_fuses, tfmr.load_kva)
-        fuse_types = f_types(app, 0)
-    else:
-        # RMU fuse
-        fuse_types = f_types(app, 1)
-        if tfmr.insulation == 'air':
-            if tfmr.load_kva < 750:
-                key = tfmr.load_kva
-            elif tfmr.impedance == 'high':
-                key = f"{tfmr.load_kva} HighZ"
+        if term.constr == dd.ConstructionType.SWER.value:
+            fuse_string = _safe_string(fm.ex_SWER_f_sizes, tfmr.load_kva)
+        elif term.constr == dd.ConstructionType.OVERHEAD.value:
+            # OH fuse
+            if term.phases == 1:
+                fuse_string = _safe_string(fm.ex_pole_1p_fuses, tfmr.load_kva)
             else:
-                key = f"{tfmr.load_kva} LowZ"
-            fuse_string = safe_string_fn(fm.ex_rmu_air_fuses, key)
+                fuse_string = _safe_string(fm.ex_pole_3p_fuses, tfmr.load_kva)
+            fuse_types = f_types(app, 0)
         else:
-            fuse_string = safe_string_fn(fm.ex_rmu_oil_fuses, tfmr.load_kva)
-
+            # RMU fuse
+            if tfmr.insulation == 'air':
+                if tfmr.load_kva < 750:
+                    key = tfmr.load_kva
+                elif tfmr.impedance == 'high':
+                    key = f"{tfmr.load_kva} HighZ"
+                else:
+                    key = f"{tfmr.load_kva} LowZ"
+                fuse_string = _safe_string(fm.ex_rmu_air_fuses, key)
+            else:
+                fuse_string = _safe_string(fm.ex_rmu_oil_fuses, tfmr.load_kva)
+            fuse_types = f_types(app, 1)
+    else:    # region == 'Regional Models':
+        fuse_types = f_types(app, 0)
+        term_volts = round(term.l_l_volts, 2)
+        if term.constr == dd.ConstructionType.SWER.value:
+            if tfmr.load_kva >= 100:
+                # SWER isolating transformer
+                if round(term_volts) == 11 and round(system_volts) == 11:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_11_11, tfmr.load_kva)
+                elif round(term_volts) == 22 and round(system_volts) == 11:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_11_127, tfmr.load_kva)
+                elif round(term_volts) == 33 and round(system_volts) == 11:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_11_191, tfmr.load_kva)
+                elif round(term_volts) == 22 and round(system_volts) == 22:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_22_127, tfmr.load_kva)
+                elif round(term_volts) == 33 and round(system_volts) == 22:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_22_191, tfmr.load_kva)
+                elif round(term_volts) == 22 and round(system_volts) == 33:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_33_127, tfmr.load_kva)
+                else: # term_volts == 33 and system_volts == 33:
+                    fuse_string = _safe_string(fm.ee_swer_isol_tr_33_191, tfmr.load_kva)
+            else:
+                # SWER transformer
+                if round(term_volts) == 11:
+                    fuse_string = _safe_string(fm.ee_swer_dist_tr_11, tfmr.load_kva)
+                elif round(term_volts) == 22:
+                    fuse_string = _safe_string(fm.ee_swer_dist_tr_127, tfmr.load_kva)
+                else: # 33kV
+                    fuse_string = _safe_string(fm.ee_swer_dist_tr_191, tfmr.load_kva)
+        else:
+            # TR HV fuse
+            # Assumed that all TR HV fuses are EDO, because pf doesn't currently contain any OH current limiting fuses
+            if round(term_volts) == 11:
+                if term.phases == 1:
+                    fuse_string = _safe_string(fm.ee_tr_11_1p, tfmr.load_kva)
+                else:
+                    fuse_string = _safe_string(fm.ee_tr_11_3p, tfmr.load_kva)
+            elif round(term_volts) == 22:
+                if term.phases == 1:
+                    fuse_string = _safe_string(fm.ee_tr_22_1p, tfmr.load_kva)
+                else:
+                    fuse_string = _safe_string(fm.ee_tr_22_3p, tfmr.load_kva)
+            else:   # 33kV
+                if term.phases == 1:
+                    fuse_string = _safe_string(fm.ee_tr_33_1p, tfmr.load_kva)
+                else:
+                    fuse_string = _safe_string(fm.ee_tr_33_3p, tfmr.load_kva)
     for fuse in fuse_types:
         if fuse.loc_name == fuse_string:
             fuse_object = fuse
             break
-
     return fuse_object
 
 
-def _get_regional_fuse(
-    app: pft.Application,
-    tfmr: dd.Tfmr,
-    term: dd.Termination,
-    system_volts: str,
-    safe_string_fn
-) -> Optional[pft.TypFuse]:
-    """
-    Get fuse type for Regional (Ergon Energy) region.
-
-    Args:
-        app: PowerFactory application instance.
-        tfmr: Transformer dataclass.
-        term: Termination dataclass.
-        system_volts: System voltage string.
-        safe_string_fn: Function to safely retrieve from dict.
-
-    Returns:
-        TypFuse object or None.
-    """
-    fuse_object = None
-    fuse_string = None
-    fuse_types = f_types(app, 0)
-    term_volts = round(term.l_l_volts, 2)
-
-    if term.constr == dd.ConstructionType.SWER.value:
-        fuse_string = _get_swer_fuse_string(
-            tfmr, term_volts, system_volts, safe_string_fn
-        )
-    else:
-        # TR HV fuse - Ergon EDO fuses
-        fuse_string = _get_tr_hv_fuse_string(
-            tfmr, term, term_volts, safe_string_fn
-        )
-
-    for fuse in fuse_types:
-        if fuse.loc_name == fuse_string:
-            fuse_object = fuse
-            break
-
-    return fuse_object
-
-
-def _get_swer_fuse_string(
-    tfmr: dd.Tfmr,
-    term_volts: float,
-    system_volts: str,
-    safe_string_fn
-) -> Optional[str]:
-    """
-    Get fuse string for SWER transformers in Regional models.
-
-    Args:
-        tfmr: Transformer dataclass.
-        term_volts: Terminal voltage (rounded).
-        system_volts: System voltage string.
-        safe_string_fn: Function to safely retrieve from dict.
-
-    Returns:
-        Fuse type string or None.
-    """
-    if tfmr.load_kva >= 100:
-        # SWER isolating transformer
-        return _get_swer_isol_fuse_string(
-            tfmr, term_volts, system_volts, safe_string_fn
-        )
-    else:
-        # SWER distribution transformer
-        return _get_swer_dist_fuse_string(tfmr, term_volts, safe_string_fn)
-
-
-def _get_swer_isol_fuse_string(
-    tfmr: dd.Tfmr,
-    term_volts: float,
-    system_volts: str,
-    safe_string_fn
-) -> Optional[str]:
-    """Get fuse string for SWER isolating transformers."""
-    tv = round(term_volts)
-    sv = round(float(system_volts))
-
-    mapping = {
-        (11, 11): fm.ee_swer_isol_tr_11_11,
-        (22, 11): fm.ee_swer_isol_tr_11_127,
-        (33, 11): fm.ee_swer_isol_tr_11_191,
-        (22, 22): fm.ee_swer_isol_tr_22_127,
-        (33, 22): fm.ee_swer_isol_tr_22_191,
-        (22, 33): fm.ee_swer_isol_tr_33_127,
-        (33, 33): fm.ee_swer_isol_tr_33_191,
-    }
-
-    fuse_dict = mapping.get((tv, sv), fm.ee_swer_isol_tr_33_191)
-    return safe_string_fn(fuse_dict, tfmr.load_kva)
-
-
-def _get_swer_dist_fuse_string(
-    tfmr: dd.Tfmr,
-    term_volts: float,
-    safe_string_fn
-) -> Optional[str]:
-    """Get fuse string for SWER distribution transformers."""
-    tv = round(term_volts)
-
-    if tv == 11:
-        return safe_string_fn(fm.ee_swer_dist_tr_11, tfmr.load_kva)
-    elif tv == 22:
-        return safe_string_fn(fm.ee_swer_dist_tr_127, tfmr.load_kva)
-    else:  # 33kV
-        return safe_string_fn(fm.ee_swer_dist_tr_191, tfmr.load_kva)
-
-
-def _get_tr_hv_fuse_string(
-    tfmr: dd.Tfmr,
-    term: dd.Termination,
-    term_volts: float,
-    safe_string_fn
-) -> Optional[str]:
-    """
-    Get fuse string for standard transformer HV fuses.
-
-    Assumes all TR HV fuses are EDO type, as PowerFactory doesn't
-    currently contain OH current limiting fuses.
-    """
-    tv = round(term_volts)
-
-    if tv == 11:
-        if term.phases == 1:
-            return safe_string_fn(fm.ee_tr_11_1p, tfmr.load_kva)
-        else:
-            return safe_string_fn(fm.ee_tr_11_3p, tfmr.load_kva)
-    elif tv == 22:
-        if term.phases == 1:
-            return safe_string_fn(fm.ee_tr_22_1p, tfmr.load_kva)
-        else:
-            return safe_string_fn(fm.ee_tr_22_3p, tfmr.load_kva)
-    else:  # 33kV
-        if term.phases == 1:
-            return safe_string_fn(fm.ee_tr_33_1p, tfmr.load_kva)
-        else:
-            return safe_string_fn(fm.ee_tr_33_3p, tfmr.load_kva)
-
-
-def f_types(app: pft.Application, recursive: int) -> List[pft.TypFuse]:
+def f_types(app: pft.Application, recursive: int):
     """
     Retrieve available fuse types from the global library.
 
@@ -392,9 +261,7 @@ def f_types(app: pft.Application, recursive: int) -> List[pft.TypFuse]:
         >>> print(f"Found {len(fuse_types)} fuse types")
     """
     ergon_lib = app.GetGlobalLibrary()
-    fuse_folder = ergon_lib.SearchObject(
-        r"\ErgonLibrary\Protection\Fuses.IntFolder"
-    )
+    fuse_folder = ergon_lib.SearchObject(r"\ErgonLibrary\Protection\Fuses.IntFolder")
     fuse_types = fuse_folder.GetContents("*.TypFuse", recursive)
     return fuse_types
 
@@ -424,23 +291,23 @@ def determine_fuse_type(fuse: pft.RelFuse) -> bool:
         Only line fuses are treated as protection devices in the
         protection section analysis.
     """
+
     # Check if fuse has the required attribute path
     fuse_active = fuse.HasAttribute("r:fold_id:r:obj_id:e:loc_name")
     if not fuse_active:
         return True
 
     fuse_grid = fuse.cpGrid
-
     # Check if fuse is in a line cubicle (System Overview)
-    term_folder_name = fuse.GetAttribute(
-        "r:fold_id:r:cterm:r:fold_id:e:loc_name"
-    )
-    if term_folder_name == fuse_grid.loc_name:
+    if (
+            fuse.GetAttribute("r:fold_id:r:cterm:r:fold_id:e:loc_name")
+            == fuse_grid.loc_name
+    ):
+        # This would indicate it is in a line cubical
         return True
 
     # Check if fuse is in a switch object
-    switch_obj_name = fuse.GetAttribute("r:fold_id:r:obj_id:e:loc_name")
-    if fuse.loc_name not in switch_obj_name:
+    if fuse.loc_name not in fuse.GetAttribute("r:fold_id:r:obj_id:e:loc_name"):
         return True
 
     # Check if secondary substation contains a transformer
@@ -449,5 +316,5 @@ def determine_fuse_type(fuse: pft.RelFuse) -> bool:
     for content in contents:
         if content.GetClassName() == "ElmTr2":
             return False
-
-    return True
+    else:
+        return True

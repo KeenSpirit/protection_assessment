@@ -104,15 +104,13 @@ ee_swer_dist_tr_191 = {
 
 # ----------------------------------------------------------------------------
 # Standard Distribution Transformer HV Fuses - 11kV (EDO, FL < 8kA)
-# Assumes TR LV fuse coordination
+# Assumes TR LV fuse
 # ----------------------------------------------------------------------------
-
 ee_tr_11_1p = {
     10: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
     25: 'FUSE LINK 11/22/33kV  6/20A CLASS K',
     50: 'FUSE LINK 11/22/33kV 16A CLASS K'
 }
-
 ee_tr_11_3p = {
     25: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
     50: 'FUSE LINK 11/22/33kV  6/20A CLASS K',
@@ -127,15 +125,13 @@ ee_tr_11_3p = {
 
 # ----------------------------------------------------------------------------
 # Standard Distribution Transformer HV Fuses - 22kV (EDO, FL < 6kA)
-# Assumes TR LV fuse coordination
+# Assumes TR LV fuse
 # ----------------------------------------------------------------------------
-
 ee_tr_22_1p = {
     10: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
     25: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
     50: 'FUSE LINK 11/22/33kV 16A CLASS K'
 }
-
 ee_tr_22_3p = {
     25: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
     50: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
@@ -150,9 +146,8 @@ ee_tr_22_3p = {
 
 # ----------------------------------------------------------------------------
 # Standard Distribution Transformer HV Fuses - 33kV (EDO, FL < 4kA)
-# Assumes TR LV fuse coordination
+# Assumes TR LV fuse
 # ----------------------------------------------------------------------------
-
 ee_tr_33_1p = {
     10: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
     25: 'FUSE LINK 11/22/33kV  3/10A CLASS K',
@@ -170,7 +165,6 @@ ee_tr_33_3p = {
     500: 'FUSE LINK 11/22/33kV 20A CLASS K',
     750: 'FUSE LINK 11/22/33kV 50A CLASS K'
 }
-
 
 # ============================================================================
 # ENERGEX FUSES (SEQ Models)

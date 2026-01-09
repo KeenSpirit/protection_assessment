@@ -14,7 +14,6 @@ Functions:
     get_open_points: Detect open points for a single feeder
 """
 
-import sys
 from typing import Dict, List, TYPE_CHECKING
 
 from pf_config import pft
@@ -24,9 +23,6 @@ from fdr_open_points import fdr_open_user_input as foui
 from importlib import reload
 
 reload(foui)
-
-if TYPE_CHECKING:
-    pass
 
 
 def main(app: pft.Application) -> None:
@@ -156,3 +152,4 @@ def get_open_points(app: pft.Application, feeder: fdr.Feeder) -> None:
             open_switches[cubicle] = switch
 
     feeder.open_points = open_switches
+

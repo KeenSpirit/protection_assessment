@@ -21,8 +21,7 @@ Functions:
 import sys
 import tkinter as tk
 from tkinter import ttk
-from typing import Dict, List
-
+from typing import List, Dict
 from pf_config import pft
 
 

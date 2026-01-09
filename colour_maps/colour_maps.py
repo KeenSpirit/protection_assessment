@@ -31,20 +31,12 @@ Functions:
 """
 
 from enum import IntEnum
-from typing import Dict, List, Set, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from pf_config import pft
 
 from relays.reach_factors import device_reach_factors
-
-
-# =============================================================================
-# Type Aliases
-# =============================================================================
-
-ReachFactorValue = Union[float, str]
-DplLookup = Dict[str, Dict[str, str]]
 
 
 # =============================================================================
@@ -55,6 +47,7 @@ class Condition(IntEnum):
     """
     Assessment result conditions mapped to attribute values.
 
+    These represent the outcome of each protection assessment check.
     Values are 1-indexed to match the DPL encoding scheme.
     """
     PASS = 1
@@ -67,7 +60,7 @@ class Colour(IntEnum):
     """
     PowerFactory colour codes for conditional formatting.
 
-    Corresponds to PowerFactory's internal colour palette indices.
+    These correspond to PowerFactory's internal colour palette indices.
     """
     GREEN = 3   # Pass
     RED = 2     # Fail
@@ -79,37 +72,53 @@ class Colour(IntEnum):
 # Lookup Tables
 # =============================================================================
 
-CONDITION_LOOKUP: Dict[str, Tuple[Condition, Colour]] = {
+# Condition string -> (Condition enum, Colour enum)
+CONDITION_LOOKUP: dict[str, tuple[Condition, Colour]] = {
     "Pass": (Condition.PASS, Colour.GREEN),
     "Fail": (Condition.FAIL, Colour.RED),
     "No Data": (Condition.NO_DATA, Colour.GREY),
     "SWER": (Condition.SWER, Colour.YELLOW),
 }
 
-CONDITION_INDEX: Dict[str, int] = {
+# Reverse lookup: condition string -> 0-based index for encoding
+CONDITION_INDEX: dict[str, int] = {
     "Pass": 0,
     "Fail": 1,
     "No Data": 2,
     "SWER": 3,
 }
 
-REACH_THRESHOLDS: Dict[str, Dict[str, float]] = {
-    "SEQ": {"primary": 2.0, "backup": 1.3},
-    "Regional Models": {"primary": 1.7, "backup": 1.3},
+# Reach factor thresholds by region and protection type
+REACH_THRESHOLDS: dict[str, dict[str, float]] = {
+    "SEQ": {
+        "primary": 2.0,
+        "backup": 1.3,
+    },
+    "Regional Models": {
+        "primary": 1.7,
+        "backup": 1.3,
+    },
 }
 
-PRIMARY_REACH_TYPES: Set[str] = {"Phase Pri Reach", "Earth Pri Reach"}
-BACKUP_REACH_TYPES: Set[str] = {"Phase BU Reach", "Earth BU Reach"}
-CONDUCTOR_DAMAGE_TYPES: Set[str] = {"Phase Cond Damage", "Earth Cond Damage"}
+# Map types classified by protection category
+PRIMARY_REACH_TYPES: set[str] = {"Phase Pri Reach", "Earth Pri Reach"}
+BACKUP_REACH_TYPES: set[str] = {"Phase BU Reach", "Earth BU Reach"}
+CONDUCTOR_DAMAGE_TYPES: set[str] = {"Phase Cond Damage", "Earth Cond Damage"}
 
-REACH_FACTOR_KEYS: Dict[str, Tuple[str, str]] = {
+# Mapping from map_type to device_reach_factors dictionary keys
+REACH_FACTOR_KEYS: dict[str, tuple[str, str]] = {
     "Phase Pri Reach": ("ph_rf", "nps_ph_rf"),
     "Earth Pri Reach": ("ef_rf", "nps_ef_rf"),
     "Phase BU Reach": ("bu_ph_rf", "bu_nps_ph_rf"),
     "Earth BU Reach": ("bu_ef_rf", "bu_nps_ef_rf"),
 }
 
-DPL_CONFIG: Dict[str, Tuple[str, str]] = {
+# DPL attribute configuration: maps each map_type to its DPL attribute
+# and position
+# Position "row" means it's the first element in the pair
+# (encoded as row in 4x4 grid)
+# Position "col" means it's the second element (encoded as column)
+DPL_CONFIG: dict[str, tuple[str, str]] = {
     "Phase Pri Reach": ("dpl1", "row"),
     "Phase BU Reach": ("dpl1", "col"),
     "Earth Pri Reach": ("dpl2", "row"),
@@ -118,19 +127,207 @@ DPL_CONFIG: Dict[str, Tuple[str, str]] = {
     "Earth Cond Damage": ("dpl3", "col"),
 }
 
-DPL_MAP_TYPE_PAIRS: Dict[str, Tuple[str, str]] = {
+# Maps DPL attribute to the pair of map_types it encodes (row_type, col_type)
+DPL_MAP_TYPE_PAIRS: dict[str, tuple[str, str]] = {
     "dpl1": ("Phase Pri Reach", "Phase BU Reach"),
     "dpl2": ("Earth Pri Reach", "Earth BU Reach"),
     "dpl3": ("Phase Cond Damage", "Earth Cond Damage"),
 }
 
-LINE_ELEMENT_FILTER: List[str] = ["*.ElmLne"]
+# PowerFactory element filter for line elements
+LINE_ELEMENT_FILTER: list[str] = ["*.ElmLne"]
 
-ALL_MAP_TYPES: List[str] = [
+# All available map types in display order
+ALL_MAP_TYPES: list[str] = [
     "Phase Pri Reach", "Earth Pri Reach",
     "Phase BU Reach", "Earth BU Reach",
     "Phase Cond Damage", "Earth Cond Damage"
 ]
+
+
+# =============================================================================
+# Type Aliases
+# =============================================================================
+
+ReachFactorValue = Union[float, str]
+DplLookup = dict[str, dict[str, str]]
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+def max_mixed_values(
+        a: ReachFactorValue,
+        b: ReachFactorValue
+) -> ReachFactorValue:
+    """
+    Return the maximum of two values that may be numbers or "NA" strings.
+
+    Args:
+        a: First value (float or string like "NA").
+        b: Second value (float or string like "NA").
+
+    Returns:
+        - "NA" if both inputs are strings
+        - The numeric value if one input is a string
+        - The maximum if both are numeric
+    """
+    a_is_string = isinstance(a, str)
+    b_is_string = isinstance(b, str)
+
+    if a_is_string and b_is_string:
+        return "NA"
+    if a_is_string:
+        return b
+    if b_is_string:
+        return a
+    return max(a, b)
+
+
+def get_protection_category(
+        map_type: str
+) -> str:
+    """
+    Determine the protection category for a given map type.
+
+    Args:
+        map_type: The map type string.
+
+    Returns:
+        Either "primary" or "backup".
+
+    Raises:
+        ValueError: If map_type is not a reach-type assessment.
+    """
+    if map_type in PRIMARY_REACH_TYPES:
+        return "primary"
+    if map_type in BACKUP_REACH_TYPES:
+        return "backup"
+    raise ValueError(f"Map type '{map_type}' is not a reach assessment type")
+
+
+def get_reach_threshold(
+        region: str,
+        map_type: str
+) -> float:
+    """
+    Get the reach factor threshold for a region and map type combination.
+
+    Args:
+        region: The network region ("SEQ" or "Regional Models").
+        map_type: The protection map type.
+
+    Returns:
+        The minimum reach factor threshold for pass condition.
+    """
+    category = get_protection_category(map_type)
+    return REACH_THRESHOLDS[region][category]
+
+
+def get_active_lines(
+        project: "DataObject"
+) -> list["DataObject"]:
+    """
+    Retrieve all line elements connected to the grid.
+
+    Args:
+        project: The active PowerFactory project.
+
+    Returns:
+        List of ElmLne objects that have a grid connection.
+    """
+    return [
+        line
+        for line in project.GetContents("*.ElmLne", True)
+        if line.GetAttribute("cpGrid")
+    ]
+
+
+def create_default_dpl_lookup() -> DplLookup:
+    """
+    Create a fresh DPL lookup dictionary with all values set to "No Data".
+
+    Returns:
+        Dictionary mapping DPL attributes to their map_type condition pairs.
+    """
+    return {
+        "dpl1": {"Phase Pri Reach": "No Data", "Phase BU Reach": "No Data"},
+        "dpl2": {"Earth Pri Reach": "No Data", "Earth BU Reach": "No Data"},
+        "dpl3": {"Phase Cond Damage": "No Data", "Earth Cond Damage": "No Data"},
+    }
+
+
+def encode_dpl_value(
+        row_condition: str,
+        col_condition: str
+) -> int:
+    """
+    Encode two condition strings into a single DPL integer value.
+
+    Uses a 4x4 grid encoding where:
+        value = row_index * 4 + col_index + 1
+
+    Args:
+        row_condition: Condition for the row element ("Pass", "Fail", etc.)
+        col_condition: Condition for the column element.
+
+    Returns:
+        Integer value 1-16 representing the condition pair.
+    """
+    row_idx = CONDITION_INDEX[row_condition]
+    col_idx = CONDITION_INDEX[col_condition]
+    return row_idx * 4 + col_idx + 1
+
+
+def get_dpl_values_for_condition(
+        position: str,
+        condition: str
+) -> list[int]:
+    """
+    Get all DPL values that match a condition in a given position.
+
+    For "row" position: returns all values where the row matches the condition.
+    For "col" position: returns all values where the column matches the condition.
+
+    Args:
+        position: Either "row" or "col".
+        condition: The condition string ("Pass", "Fail", etc.)
+
+    Returns:
+        List of 4 integer values that match the condition in that position.
+    """
+    condition_idx = CONDITION_INDEX[condition]
+
+    if position == "row":
+        # Row determines the "tens" place: values are condition_idx*4 + 1,2,3,4
+        base = condition_idx * 4
+        return [base + i for i in range(1, 5)]
+    else:  # col
+        # Column determines the "ones" place: values are condition_idx+1 + 0,4,8,12
+        return [condition_idx + 1 + i * 4 for i in range(4)]
+
+
+def build_filter_expression(
+        dpl_attr: str,
+        values: list[int]
+) -> str:
+    """
+    Build PowerFactory filter expression for matching DPL values.
+
+    Args:
+        dpl_attr: DPL attribute name (e.g., 'dpl1').
+        values: List of integer values to match.
+
+    Returns:
+        PowerFactory expression string.
+
+    Example:
+        >>> build_filter_expression('dpl1', [1, 2, 3, 4])
+        '{e:dpl1=1}.or.{e:dpl1=2}.or.{e:dpl1=3}.or.{e:dpl1=4}'
+    """
+    clauses = [f"{{e:{dpl_attr}={v}}}" for v in values]
+    return ".or.".join(clauses)
 
 
 # =============================================================================
@@ -140,8 +337,8 @@ ALL_MAP_TYPES: List[str] = [
 def colour_map(
     app: "pft.Application",
     region: str,
-    feeders: List,
-    study_selections: List[str]
+    feeders: list,
+    study_selections: list[str]
 ) -> None:
     """
     Configure colour maps and write protection assessment results.
@@ -173,14 +370,13 @@ def colour_map(
     if study_type not in study_selections:
         return
 
-    # Determine map types to process
+    # Determine which map types to process
     map_types = [
         "Phase Pri Reach", "Earth Pri Reach",
         "Phase BU Reach", "Earth BU Reach"
     ]
-
-    include_cond_damage = "Conductor Damage Assessment" in study_selections
-    if include_cond_damage:
+    include_conductor_damage = "Conductor Damage Assessment" in study_selections
+    if include_conductor_damage:
         map_types.extend(["Phase Cond Damage", "Earth Cond Damage"])
 
     project = app.GetActiveProject()
@@ -190,9 +386,101 @@ def colour_map(
     try:
         for feeder in feeders:
             _process_feeder(app, region, feeder, map_types)
-            _print_completion_message(app, feeder, include_cond_damage)
+            _print_completion_message(app, feeder, include_conductor_damage)
     finally:
         app.SetGraphicUpdate(1)
+
+
+def _process_feeder(
+    app: "Application",
+    region: str,
+    feeder,
+    map_types: list[str]
+) -> None:
+    """
+    Process all devices for a single feeder.
+
+    Args:
+        app: PowerFactory application object.
+        region: Network region identifier.
+        feeder: Feeder object containing devices.
+        map_types: List of map types to assess.
+    """
+    for device in feeder.devices:
+        _process_device(app, region, device, map_types)
+
+
+def _process_device(
+    app: "Application",
+    region: str,
+    device,
+    map_types: list[str]
+) -> None:
+    """
+    Process all line sections for a single protection device.
+
+    Args:
+        app: PowerFactory application object.
+        region: Network region identifier.
+        device: Protection device object.
+        map_types: List of map types to assess.
+    """
+    dev_reach_factors = device_reach_factors(
+        region, device, device.sect_lines
+    )
+
+    for i, line in enumerate(device.sect_lines):
+        # Create fresh lookup for each line
+        dpl_lookup = create_default_dpl_lookup()
+
+        # Process conductor damage assessments
+        for map_type in map_types:
+            if map_type in CONDUCTOR_DAMAGE_TYPES:
+                _assess_conductor_damage(line, map_type, dpl_lookup)
+
+        # Process reach assessments
+        for map_type, keys in REACH_FACTOR_KEYS.items():
+            if map_type not in map_types:
+                continue
+
+            reach_factor = max_mixed_values(
+                dev_reach_factors[keys[0]][i],
+                dev_reach_factors[keys[1]][i]
+            )
+            _assess_reach(region, map_type, reach_factor, dpl_lookup)
+
+        _write_result(dpl_lookup, line)
+
+
+def _print_completion_message(
+    app: "Application",
+    feeder,
+    include_conductor_damage: bool
+) -> None:
+    """
+    Print completion message with created colour scheme names.
+
+    Args:
+        app: PowerFactory application object.
+        feeder: Feeder object that was processed.
+        include_conductor_damage: Whether conductor damage was included.
+    """
+    feeder_name = feeder.obj.loc_name
+    app.PrintPlain(
+        f"Protection reach results saved in PowerFactory as user-defined "
+        f"diagram colouring schemes:\n"
+        f"'{feeder_name} Phase Pri Reach'\n"
+        f"'{feeder_name} Earth Pri Reach'\n"
+        f"'{feeder_name} Phase BU Reach'\n"
+        f"'{feeder_name} Earth BU Reach'."
+    )
+    if include_conductor_damage:
+        app.PrintPlain(
+            f"Conductor damage results saved in PowerFactory as user-defined "
+            f"diagram colouring schemes:\n"
+            f"'{feeder_name} Phase Cond Damage'\n"
+            f"'{feeder_name} Earth Cond Damage'."
+        )
 
 
 # =============================================================================
@@ -202,17 +490,17 @@ def colour_map(
 def set_up(
     app: "pft.Application",
     project: "pft.DataObject",
-    feeders: List,
-    map_types: List[str]
+    feeders: list,
+    map_types: list[str]
 ) -> None:
     """
-    Configure colour filters and conditional formatting.
+    Configure colour filters and conditional formatting for feeders.
 
     Args:
         app: PowerFactory application object.
-        project: Active PowerFactory project.
-        feeders: List of Feeder dataclasses.
-        map_types: List of map type strings to create filters for.
+        project: The active PowerFactory project.
+        feeders: List of feeder objects.
+        map_types: List of map types to create filters for.
     """
     filter_names = []
     for feeder in feeders:
@@ -227,17 +515,17 @@ def set_up(
 
 def configure_quick_filters(
     project: "pft.DataObject",
-    filter_names: List[str]
+    filter_names: list[str]
 ) -> "pft.DataObject":
     """
-    Create quick filters in the project settings folder.
+    Configure quick filters in the Project Colour Settings folder.
 
     Args:
-        project: Active PowerFactory project.
+        project: The active PowerFactory project.
         filter_names: List of filter names to create.
 
     Returns:
-        Settings folder DataObject for colour configuration.
+        The settings folder DataObject for use in colour configuration.
     """
     settings_folder = project.GetContents("*.SetFold", True)[0]
 
@@ -255,33 +543,9 @@ def configure_quick_filters(
     return settings_folder
 
 
-def configure_colour_conditions(
-    settings_folder: "pft.DataObject",
-    filter_names: List[str]
-) -> None:
-    """
-    Configure conditional colour formatting in project colour settings.
-
-    Args:
-        settings_folder: Project settings folder.
-        filter_names: List of filter names to create condition sets for.
-    """
-    colour_folder = settings_folder.GetContents("*.SetColours", True)[0]
-
-    for name in filter_names:
-        # Remove existing condition sets
-        existing_sets = colour_folder.GetContents("*.IntFiltSet", True)
-        for existing_set in existing_sets:
-            if name in existing_set.loc_name:
-                existing_set.Delete()
-
-        condition_set = colour_folder.CreateObject("IntFiltset", name)
-        _create_condition_filters(condition_set, name)
-
-
 def _create_condition_filters(
-    parent_object: "pft.DataObject",
-    filter_name: str
+        parent_object: "pft.DataObject",
+        filter_name: str
 ) -> None:
     """
     Create condition filter objects under a parent filter.
@@ -293,20 +557,19 @@ def _create_condition_filters(
         parent_object: IntFilt or IntFiltSet parent object.
         filter_name: Full filter name to determine map type.
     """
+    # Determine which map type this filter is for
     map_type = _extract_map_type_from_name(filter_name)
     dpl_attr, position = DPL_CONFIG[map_type]
 
     for condition_name, (_, colour) in CONDITION_LOOKUP.items():
         parent_object.CreateObject("SetFilt", condition_name)
-        condition_filter = parent_object.GetContents(
-            f"{condition_name}.SetFilt"
-        )[0]
+        condition_filter = parent_object.GetContents(f"{condition_name}.SetFilt")[0]
 
         condition_filter.SetAttribute("objset", LINE_ELEMENT_FILTER)
         condition_filter.SetAttribute("icalcrel", 1)
         condition_filter.SetAttribute("icoups", 0)
 
-        # Build expression for this condition
+        # Build expression from the encoding pattern
         values = get_dpl_values_for_condition(position, condition_name)
         expression = build_filter_expression(dpl_attr, values)
 
@@ -314,16 +577,37 @@ def _create_condition_filters(
         condition_filter.SetAttribute("color", int(colour))
 
 
+def _extract_map_type_from_name(
+        filter_name: str
+) -> str:
+    """
+    Extract the map type from a filter name.
+
+    Args:
+        filter_name: Full filter name like "Feeder1 Phase Pri Reach".
+
+    Returns:
+        The map type string.
+
+    Raises:
+        ValueError: If no matching map type is found.
+    """
+    for map_type in ALL_MAP_TYPES:
+        if map_type in filter_name:
+            return map_type
+    raise ValueError(f"No matching map type found in name: {filter_name}")
+
+
 def clear_dpl_attributes(
-    app: "pft.Application",
-    project: "pft.DataObject"
+        app: "pft.Application",
+        project: "pft.DataObject"
 ) -> None:
     """
-    Clear all DPL attributes from line elements.
+    Clear all DPL attributes from line elements in the model.
 
     Args:
         app: PowerFactory application object.
-        project: Active PowerFactory project.
+        project: The active PowerFactory project.
     """
     app.SetGraphicUpdate(0)
 
@@ -339,101 +623,28 @@ def clear_dpl_attributes(
         app.SetGraphicUpdate(1)
 
 
-# =============================================================================
-# Processing Functions
-# =============================================================================
-
-def _process_feeder(
-    app: "pft.Application",
-    region: str,
-    feeder,
-    map_types: List[str]
+def configure_colour_conditions(
+    settings_folder: "pft.DataObject",
+    filter_names: list[str]
 ) -> None:
     """
-    Process all devices for a single feeder.
+    Configure conditional colour formatting in the project colour settings.
 
     Args:
-        app: PowerFactory application object.
-        region: Network region identifier.
-        feeder: Feeder dataclass containing devices.
-        map_types: List of map types to assess.
+        settings_folder: The project settings folder.
+        filter_names: List of filter names to create condition sets for.
     """
-    for device in feeder.devices:
-        _process_device(app, region, device, map_types)
+    colour_folder = settings_folder.GetContents("*.SetColours", True)[0]
 
+    for name in filter_names:
+        # Remove existing condition sets with this name
+        existing_sets = colour_folder.GetContents("*.IntFiltSet", True)
+        for existing_set in existing_sets:
+            if name in existing_set.loc_name:
+                existing_set.Delete()
 
-def _process_device(
-    app: "pft.Application",
-    region: str,
-    device,
-    map_types: List[str]
-) -> None:
-    """
-    Process all line sections for a single protection device.
-
-    Args:
-        app: PowerFactory application object.
-        region: Network region identifier.
-        device: Device dataclass with sect_lines.
-        map_types: List of map types to assess.
-    """
-    dev_reach_factors = device_reach_factors(
-        region, device, device.sect_lines
-    )
-
-    for i, line in enumerate(device.sect_lines):
-        dpl_lookup = create_default_dpl_lookup()
-
-        # Conductor damage assessments
-        for map_type in map_types:
-            if map_type in CONDUCTOR_DAMAGE_TYPES:
-                _assess_conductor_damage(line, map_type, dpl_lookup)
-
-        # Reach assessments
-        for map_type, keys in REACH_FACTOR_KEYS.items():
-            if map_type not in map_types:
-                continue
-
-            reach_factor = max_mixed_values(
-                dev_reach_factors[keys[0]][i],
-                dev_reach_factors[keys[1]][i]
-            )
-            _assess_reach(region, map_type, reach_factor, dpl_lookup)
-
-        _write_result(dpl_lookup, line)
-
-
-def _print_completion_message(
-    app: "pft.Application",
-    feeder,
-    include_conductor_damage: bool
-) -> None:
-    """
-    Print completion message with created colour scheme names.
-
-    Args:
-        app: PowerFactory application object.
-        feeder: Processed Feeder dataclass.
-        include_conductor_damage: Whether conductor damage was included.
-    """
-    name = feeder.obj.loc_name
-
-    app.PrintPlain(
-        f"Protection reach results saved in PowerFactory as user-defined "
-        f"diagram colouring schemes:\n"
-        f"'{name} Phase Pri Reach'\n"
-        f"'{name} Earth Pri Reach'\n"
-        f"'{name} Phase BU Reach'\n"
-        f"'{name} Earth BU Reach'."
-    )
-
-    if include_conductor_damage:
-        app.PrintPlain(
-            f"Conductor damage results saved in PowerFactory as "
-            f"user-defined diagram colouring schemes:\n"
-            f"'{name} Phase Cond Damage'\n"
-            f"'{name} Earth Cond Damage'."
-        )
+        condition_set = colour_folder.CreateObject("IntFiltset", name)
+        _create_condition_filters(condition_set, name)
 
 
 # =============================================================================
@@ -447,12 +658,12 @@ def _assess_reach(
     dpl_lookup: DplLookup
 ) -> None:
     """
-    Assess reach factor against regional thresholds.
+    Assess reach factor against regional thresholds and update lookup.
 
     Args:
-        region: Network region ('SEQ' or 'Regional Models').
-        map_type: Reach assessment type string.
-        reach_factor: Calculated reach factor or 'NA' string.
+        region: Network region identifier ("SEQ" or "Regional Models").
+        map_type: The reach assessment type.
+        reach_factor: Calculated reach factor (numeric) or "NA" string.
         dpl_lookup: Dictionary to update with assessment result.
     """
     dpl_attr, _ = DPL_CONFIG[map_type]
@@ -475,16 +686,18 @@ def _assess_conductor_damage(
     Assess conductor damage based on fault energy vs thermal rating.
 
     Args:
-        line: Line dataclass with thermal and energy attributes.
-        map_type: 'Phase Cond Damage' or 'Earth Cond Damage'.
+        line: Line object with thermal and energy attributes.
+        map_type: Either "Phase Cond Damage" or "Earth Cond Damage".
         dpl_lookup: Dictionary to update with assessment result.
     """
     dpl_attr, _ = DPL_CONFIG[map_type]
 
+    # Check for SWER line
     if _is_swer_line(line):
         dpl_lookup[dpl_attr][map_type] = "SWER"
         return
 
+    # Get the appropriate energy attribute
     energy_attr = "ph_energy" if map_type == "Phase Cond Damage" else "pg_energy"
 
     try:
@@ -495,6 +708,7 @@ def _assess_conductor_damage(
             dpl_lookup[dpl_attr][map_type] = "No Data"
             return
 
+        # Calculate allowable energy (I²t with t=1 second)
         allowable_energy = thermal_rating ** 2
         condition = "Pass" if line_energy <= allowable_energy else "Fail"
         dpl_lookup[dpl_attr][map_type] = condition
@@ -503,15 +717,17 @@ def _assess_conductor_damage(
         dpl_lookup[dpl_attr][map_type] = "No Data"
 
 
-def _is_swer_line(line) -> bool:
+def _is_swer_line(
+        line
+) -> bool:
     """
     Check if a line is a SWER (Single Wire Earth Return) line.
 
     Args:
-        line: Line dataclass with obj.typ_id attribute.
+        line: Line object with .obj.typ_id attribute.
 
     Returns:
-        True if line type contains 'SWER', False otherwise.
+        True if the line type contains "SWER", False otherwise.
     """
     try:
         line_type = line.obj.typ_id
@@ -524,16 +740,19 @@ def _is_swer_line(line) -> bool:
 # Result Writing
 # =============================================================================
 
-def _write_result(dpl_lookup: DplLookup, line) -> None:
+def _write_result(
+        dpl_lookup: DplLookup,
+        line
+) -> None:
     """
     Write colour scheme results to a line element.
 
-    Encodes each condition pair into a single DPL value using
+    Encodes each pair of conditions into a single DPL value using
     the 4x4 grid encoding scheme.
 
     Args:
-        dpl_lookup: Dictionary mapping DPL attributes to conditions.
-        line: Line dataclass with obj attribute for PowerFactory element.
+        dpl_lookup: Dictionary mapping DPL attributes to condition pairs.
+        line: Line object with .obj attribute for PowerFactory element.
     """
     for dpl_attr, (row_type, col_type) in DPL_MAP_TYPE_PAIRS.items():
         row_condition = dpl_lookup[dpl_attr][row_type]
@@ -541,179 +760,3 @@ def _write_result(dpl_lookup: DplLookup, line) -> None:
 
         value = encode_dpl_value(row_condition, col_condition)
         line.obj.SetAttribute(f"e:{dpl_attr}", value)
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-def max_mixed_values(
-    a: ReachFactorValue,
-    b: ReachFactorValue
-) -> ReachFactorValue:
-    """
-    Return maximum of two values that may be numbers or 'NA' strings.
-
-    Args:
-        a: First value (float or 'NA' string).
-        b: Second value (float or 'NA' string).
-
-    Returns:
-        'NA' if both are strings, the numeric value if one is string,
-        or the maximum if both are numeric.
-    """
-    a_is_string = isinstance(a, str)
-    b_is_string = isinstance(b, str)
-
-    if a_is_string and b_is_string:
-        return "NA"
-    if a_is_string:
-        return b
-    if b_is_string:
-        return a
-    return max(a, b)
-
-
-def get_protection_category(map_type: str) -> str:
-    """
-    Determine protection category for a given map type.
-
-    Args:
-        map_type: Map type string.
-
-    Returns:
-        'primary' or 'backup'.
-
-    Raises:
-        ValueError: If map_type is not a reach assessment type.
-    """
-    if map_type in PRIMARY_REACH_TYPES:
-        return "primary"
-    if map_type in BACKUP_REACH_TYPES:
-        return "backup"
-    raise ValueError(f"Map type '{map_type}' is not a reach assessment type")
-
-
-def get_reach_threshold(region: str, map_type: str) -> float:
-    """
-    Get reach factor threshold for a region and map type.
-
-    Args:
-        region: Network region ('SEQ' or 'Regional Models').
-        map_type: Protection map type string.
-
-    Returns:
-        Minimum reach factor threshold for pass condition.
-    """
-    category = get_protection_category(map_type)
-    return REACH_THRESHOLDS[region][category]
-
-
-def get_active_lines(project: "pft.DataObject") -> List["pft.DataObject"]:
-    """
-    Retrieve all line elements connected to the grid.
-
-    Args:
-        project: Active PowerFactory project.
-
-    Returns:
-        List of ElmLne objects with grid connections.
-    """
-    return [
-        line
-        for line in project.GetContents("*.ElmLne", True)
-        if line.GetAttribute("cpGrid")
-    ]
-
-
-def create_default_dpl_lookup() -> DplLookup:
-    """
-    Create DPL lookup dictionary with all values set to 'No Data'.
-
-    Returns:
-        Dictionary mapping DPL attributes to condition pair dicts.
-    """
-    return {
-        "dpl1": {"Phase Pri Reach": "No Data", "Phase BU Reach": "No Data"},
-        "dpl2": {"Earth Pri Reach": "No Data", "Earth BU Reach": "No Data"},
-        "dpl3": {"Phase Cond Damage": "No Data", "Earth Cond Damage": "No Data"},
-    }
-
-
-def encode_dpl_value(row_condition: str, col_condition: str) -> int:
-    """
-    Encode two condition strings into a single DPL integer value.
-
-    Uses 4x4 grid encoding: value = row_index * 4 + col_index + 1
-
-    Args:
-        row_condition: Row element condition string.
-        col_condition: Column element condition string.
-
-    Returns:
-        Integer value 1-16 representing the condition pair.
-    """
-    row_idx = CONDITION_INDEX[row_condition]
-    col_idx = CONDITION_INDEX[col_condition]
-    return row_idx * 4 + col_idx + 1
-
-
-def get_dpl_values_for_condition(position: str, condition: str) -> List[int]:
-    """
-    Get all DPL values matching a condition in a given position.
-
-    For 'row' position: returns values where row matches condition.
-    For 'col' position: returns values where column matches condition.
-
-    Args:
-        position: 'row' or 'col'.
-        condition: Condition string ('Pass', 'Fail', etc.).
-
-    Returns:
-        List of 4 integer values matching the condition.
-    """
-    condition_idx = CONDITION_INDEX[condition]
-
-    if position == "row":
-        base = condition_idx * 4
-        return [base + i for i in range(1, 5)]
-    else:
-        return [condition_idx + 1 + i * 4 for i in range(4)]
-
-
-def build_filter_expression(dpl_attr: str, values: List[int]) -> str:
-    """
-    Build PowerFactory filter expression for matching DPL values.
-
-    Args:
-        dpl_attr: DPL attribute name (e.g., 'dpl1').
-        values: List of integer values to match.
-
-    Returns:
-        PowerFactory expression string.
-
-    Example:
-        >>> build_filter_expression('dpl1', [1, 2, 3, 4])
-        '{e:dpl1=1}.or.{e:dpl1=2}.or.{e:dpl1=3}.or.{e:dpl1=4}'
-    """
-    clauses = [f"{{e:{dpl_attr}={v}}}" for v in values]
-    return ".or.".join(clauses)
-
-
-def _extract_map_type_from_name(filter_name: str) -> str:
-    """
-    Extract map type from a filter name.
-
-    Args:
-        filter_name: Full filter name like 'Feeder1 Phase Pri Reach'.
-
-    Returns:
-        Map type string.
-
-    Raises:
-        ValueError: If no matching map type found.
-    """
-    for map_type in ALL_MAP_TYPES:
-        if map_type in filter_name:
-            return map_type
-    raise ValueError(f"No matching map type found in name: {filter_name}")
