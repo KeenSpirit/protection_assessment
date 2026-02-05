@@ -14,19 +14,14 @@ Plot Features:
 
 Functions:
     plot_all_relays: Main entry point for plot generation
-    new_page_format: Create A4 landscape page format
-    drawing_format: Configure graphics board drawing format
-    create_plot_folder: Create timestamped folder for plots
     update_ds_tr_data: Collect RMU fuse specifications for SEQ
     create_colour_dic: Assign unique colours to devices
     create_plot: Generate a single coordination plot
-    create_draw_format: Apply drawing format to plot page
-    plot_settings: Configure plot axis and display settings
-    setocplt: Apply overcurrent plot settings object
-    xvalue_settings: Configure fault level marker lines
+    create_plot_folder: Create timestamped folder for plots
+    _add_fault_markers: Configure fault level marker lines
+    _add_transformer_fuse: Add fuse curve and marker to plot
 """
 
-import math
 import time
 from typing import Dict, List
 
@@ -35,14 +30,10 @@ from devices import fuses as ds
 from oc_plots import get_rmu_fuses as grf
 from pf_protection_helper import create_obj, obtain_region
 import domain as dd
+from oc_plots import plot_settings
 from importlib import reload
+reload (plot_settings)
 
-
-
-
-# =============================================================================
-# MAIN ENTRY POINT
-# =============================================================================
 
 def plot_all_relays(
     app: pft.Application,
@@ -80,13 +71,12 @@ def plot_all_relays(
         f"{feeder.obj.loc_name}..."
     )
 
-    new_format = new_page_format(app)
     study_case = app.GetActiveStudyCase()
     graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
+    project = app.GetActiveProject()
 
     study_case.Deactivate()
-    drawing_format(graphics_board, new_format)
-    plot_folder = create_plot_folder(feeder, graphics_board)
+    plot_folder = create_plot_folder(feeder, project)
 
     # Collect RMU fuse data for SEQ transformers
     update_ds_tr_data(app, selected_devices)
@@ -112,20 +102,20 @@ def plot_all_relays(
         )
 
         if has_relays:
+
             # Earth fault plot
-            vipage = create_plot(
+            create_plot(
                 app, plot_folder, colour_dic, devices,
                 feeder.sys_volts, f_type='Ground'
             )
-            create_draw_format(vipage)
 
             # Phase fault plot (if applicable)
             if any(device.min_fl_2ph > 0 for device in devices):
-                vipage = create_plot(
+                create_plot(
                     app, plot_folder, colour_dic, devices,
                     feeder.sys_volts, f_type='Phase'
                 )
-                create_draw_format(vipage)
+
         else:
             app.PrintPlain(
                 f'No relays in feeder {feeder.obj.loc_name} to plot.'
@@ -136,85 +126,6 @@ def plot_all_relays(
     app.PrintPlain(
         f"Time overcurrent plots saved in PowerFactory to:\n{directory}"
     )
-
-
-# =============================================================================
-# PAGE FORMAT SETUP
-# =============================================================================
-
-def new_page_format(app: pft.Application) -> pft.SetFormat:
-    """
-    Create A4 landscape page format in project settings.
-
-    Args:
-        app: PowerFactory application instance.
-
-    Returns:
-        SetFormat object configured for A4 landscape (297x210mm).
-    """
-    prjt = app.GetActiveProject()
-    settings = prjt.GetContents('Settings.SetFold')[0]
-    formats = create_obj(settings, "Page Formats", "SetFoldpage")
-
-    new_format_name = 'A4'
-    new_format = create_obj(formats, new_format_name, "SetFormat")
-    new_format.iSizeX = 297
-    new_format.iSizeY = 210
-    new_format.iLeft = 0
-    new_format.iRight = 0
-    new_format.iTop = 0
-    new_format.iBottom = 0
-
-    return new_format
-
-
-def drawing_format(
-    graphics_board: pft.SetDesktop,
-    format_graph: pft.SetFormat
-) -> None:
-    """
-    Configure drawing format for the graphics board.
-
-    Args:
-        graphics_board: PowerFactory SetDesktop object.
-        format_graph: Page format to apply.
-    """
-    draw_form = create_obj(graphics_board, "Drawing Format", "SetGrfpage")
-    draw_form.iDrwFrm = 1  # Landscape
-    draw_form.aDrwFrm = format_graph.loc_name
-
-
-def create_plot_folder(
-    feeder: dd.Feeder,
-    graphics_board: pft.SetDesktop
-) -> pft.IntFolder:
-    """
-    Create timestamped folder for coordination plots.
-
-    Args:
-        feeder: Feeder dataclass for naming.
-        graphics_board: Graphics board to create folder in.
-
-    Returns:
-        IntFolder object for storing plots.
-    """
-    date_string = time.strftime("%Y%m%d-%H%M%S")
-    title = f'{date_string} {feeder.obj.loc_name} Prot Coord Plots'
-
-    return graphics_board.CreateObject("IntFolder", title)
-
-
-def create_draw_format(vipage: pft.SetVipage) -> None:
-    """
-    Apply drawing format to a plot page.
-
-    Args:
-        vipage: Plot page object.
-    """
-    draw_format = create_obj(vipage, "Drawing Format", "SetGrfpage")
-    draw_format.iDrwFrm = 1  # Landscape
-    draw_format.aDrwFrm = 'A4'
-
 
 # =============================================================================
 # TRANSFORMER DATA COLLECTION
@@ -322,24 +233,20 @@ def create_colour_dic(devices: List[dd.Device]) -> Dict:
         if device not in unique_devices:
             unique_devices.append(device)
 
-    # Colour 0 is white, start with 1
-    colour_dic = {device.obj: i + 1 for i, device in enumerate(unique_devices)}
+    # Colour 0 is white, 1 is black, start with 2 (Red)
+    colour_dic = {device.obj: i + 2 for i, device in enumerate(unique_devices)}
 
     return colour_dic
 
 
-# =============================================================================
-# PLOT CREATION
-# =============================================================================
-
 def create_plot(
     app: pft.Application,
-    graphics_board: pft.SetDesktop,
+    plot_folder: pft.IntFolder,
     colour_dic: Dict,
     devices: List[dd.Device],
     sys_volts: str,
     f_type: str
-) -> pft.SetVipage:
+) -> None:
     """
     Create a single time-overcurrent coordination plot.
 
@@ -351,7 +258,7 @@ def create_plot(
 
     Args:
         app: PowerFactory application instance.
-        graphics_board: Target folder for plot.
+        plot_folder: Target folder for plot.
         colour_dic: Device to colour index mapping.
         devices: List of devices at same terminal to plot.
         sys_volts: System voltage string for fuse selection.
@@ -369,18 +276,25 @@ def create_plot(
 
     # Create plot page
     folder_name = f"{devices_name} {f_type} Coord Plot {date_string}"
-    vipage = create_obj(graphics_board, folder_name, "SetVipage")
+    grppage = create_obj(plot_folder, folder_name, "GrpPage")
+    drawing_format = create_obj(grppage, "Drawing Format", "SetGrfpage")
+    plot_settings.setup_drawing_format(drawing_format)
 
+    # Configure plot settings
+    pltlinebarplot = grppage.GetOrInsertPlot(folder_name, 10, 1)
+    plot_settings.axis_settings(pltlinebarplot, f_type, devices)
+    pltlegend = pltlinebarplot.GetLegend()
     plot_name = f"{devices_name} {f_type} Coord Plot {date_string}"
-    plot = vipage.CreateObject("VisOcplot", plot_name)
-    plot.Clear()
+    plot_settings.title_settings(pltlinebarplot, plot_name)
+    pltovercurrent = pltlinebarplot.GetDataSource()
+    plot_settings.setup_toc_plot(pltovercurrent, f_type)
 
     # Add fault level markers
-    _add_fault_markers(plot, devices, devices_name, f_type)
+    _add_fault_markers(pltlinebarplot, devices, devices_name, f_type)
 
     # Add downstream transformer fuse
     ds_fuse = _add_transformer_fuse(
-        app, plot, devices, sys_volts, f_type
+        app, pltlinebarplot, devices, sys_volts, f_type
     )
 
     # Add all device curves to plot
@@ -394,15 +308,32 @@ def create_plot(
         else:
             colour = 10  # Fuse colour
 
-        plot.AddRelay(device, colour)
+        # Relays are added to the pltovercurrent object
+        pltovercurrent.AddCurve(device, colour, 1, 80.0)
 
-    plot_settings(plot, devices[0], f_type)
 
-    return vipage
+def create_plot_folder(
+    feeder: dd.Feeder,
+    graphics_board: pft.SetDesktop
+) -> pft.IntFolder:
+    """
+    Create timestamped folder for coordination plots.
+
+    Args:
+        feeder: Feeder dataclass for naming.
+        graphics_board: Graphics board to create folder in.
+
+    Returns:
+        IntFolder object for storing plots.
+    """
+    date_string = time.strftime("%Y%m%d-%H%M%S")
+    title = f'{date_string} {feeder.obj.loc_name} Prot Coord Plots'
+
+    return graphics_board.CreateObject("IntFolder", title)
 
 
 def _add_fault_markers(
-    plot: pft.VisOcplot,
+    plot,
     devices: List[dd.Device],
     devices_name: str,
     f_type: str
@@ -422,20 +353,20 @@ def _add_fault_markers(
     if f_type == 'Ground':
         min_fl_value = min(d.min_fl_pg for d in devices)
         max_fl_value = max(d.max_fl_pg for d in devices)
-        xvalue_settings(min_fl, 'PG Min FL', min_fl_value)
-        xvalue_settings(max_fl, 'PG Max FL', max_fl_value)
+        plot_settings.xvalue_settings(min_fl, 'PG Min FL', min_fl_value)
+        plot_settings.xvalue_settings(max_fl, 'PG Max FL', max_fl_value)
     else:
         min_fl_value = min(d.min_fl_2ph for d in devices)
         max_fl_value = max(
             max(d.max_fl_3ph, d.max_fl_2ph) for d in devices
         )
-        xvalue_settings(min_fl, "Ph Min FL", min_fl_value)
-        xvalue_settings(max_fl, "Ph Max FL", max_fl_value)
+        plot_settings.xvalue_settings(min_fl, "Ph Min FL", min_fl_value)
+        plot_settings.xvalue_settings(max_fl, "Ph Max FL", max_fl_value)
 
 
 def _add_transformer_fuse(
     app: pft.Application,
-    plot: pft.VisOcplot,
+    plot,
     devices: List[dd.Device],
     sys_volts: str,
     f_type: str
@@ -472,9 +403,9 @@ def _add_transformer_fuse(
     max_tr_fl = plot.CreateObject("VisXvalue", f'{tr_name} max fl')
 
     if f_type == 'Ground':
-        xvalue_settings(max_tr_fl, 'DS TR PG Max FL', max_ds_tr.max_pg)
+        plot_settings.xvalue_settings(max_tr_fl, 'DS TR PG Max FL', max_ds_tr.max_pg)
     else:
-        xvalue_settings(max_tr_fl, "DS TR Ph Max FL", max_ds_tr.max_ph)
+        plot_settings.xvalue_settings(max_tr_fl, "DS TR Ph Max FL", max_ds_tr.max_ph)
 
     # Create/get fuse element
     tr_term_dataclass = next(
@@ -494,110 +425,3 @@ def _add_transformer_fuse(
         return []
 
     return ds_fuse
-
-
-# =============================================================================
-# PLOT SETTINGS
-# =============================================================================
-
-def plot_settings(
-    plot: pft.VisOcplot,
-    relay: dd.Device,
-    f_type: str
-) -> None:
-    """
-    Configure plot axis ranges and display settings.
-
-    Args:
-        plot: VisOcplot object to configure.
-        relay: Reference device for fault level bounds.
-        f_type: 'Ground' or 'Phase' fault type.
-
-    Settings Applied:
-        - X-axis: Log scale, auto-fit to fault range
-        - Y-axis: Log scale, 0.01 to 10 seconds
-        - Earth fault curves: Dashed line style
-    """
-    if f_type == 'Ground':
-        x_min = _get_bound(relay.min_fl_pg, bound='Min')
-        x_max = _get_bound(relay.max_fl_pg, bound='Max')
-        # Dashed line style for earth fault curves
-        plot.gStyle = [10 for _ in range(len(plot.gStyle))]
-    else:
-        max_fl_ph = max(relay.max_fl_2ph, relay.max_fl_3ph)
-        x_min = _get_bound(relay.min_fl_2ph, bound='Min')
-        x_max = _get_bound(max_fl_ph, bound='Max')
-
-    setocplt(plot, f_type)
-
-    plot.x_max = x_max
-    plot.x_min = x_min
-    plot.x_map = 1  # Log scale
-    plot.y_max = 10
-    plot.y_min = 0.01
-    plot.y_map = 1  # Log scale
-    plot.y_fit = 0  # Fixed scale
-
-
-def _get_bound(num: float, bound: str) -> float:
-    """
-    Round fault level to nearest order of magnitude.
-
-    Args:
-        num: Fault level value.
-        bound: 'Min' to round down, 'Max' to round up.
-
-    Returns:
-        Rounded value for axis limit.
-    """
-    order_of_mag = 10 ** int(math.log10(num))
-
-    if bound == 'Min':
-        return math.floor(num / order_of_mag) * order_of_mag
-    else:
-        return math.ceil(num / order_of_mag) * order_of_mag
-
-
-def setocplt(plot: pft.VisOcplot, f_type: str) -> None:
-    """
-    Create and configure overcurrent plot settings object.
-
-    Args:
-        plot: VisOcplot object to configure.
-        f_type: 'Ground' or 'Phase' fault type.
-    """
-    settings = create_obj(plot, "Overcurrent Plot Settings", "SetOcplt")
-
-    settings.unit = 0  # Primary current
-    settings.ishow = 2 if f_type == 'Ground' else 1  # Phase and/or Earth
-    settings.ishowminmax = 0  # All characteristics
-    settings.ishowdir = 0  # All directions
-    settings.ishowtframe = 0  # All recloser operations
-    settings.ishowcalc = 1  # Display current automatically
-    settings.iTbrk = 0  # No breaker time consideration
-    settings.iushow = 0  # All voltage references
-    settings.imarg = 1  # Show grading margins
-
-
-def xvalue_settings(
-    constant: pft.VisXvalue,
-    name: str,
-    value: float
-) -> None:
-    """
-    Configure fault current marker line settings.
-
-    Args:
-        constant: VisXvalue object to configure.
-        name: Label text for the marker.
-        value: Fault current value in Amperes.
-    """
-    constant.loc_name = name
-    constant.label = 1
-    constant.lab_text = [name]
-    constant.show = 1  # Show with intersections
-    constant.iopt_lab = 3  # Label position
-    constant.value = value
-    constant.color = 1
-    constant.width = 5
-    constant.xis = 0  # Current axis

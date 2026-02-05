@@ -50,19 +50,18 @@ from find_substation import find_sub
 import domain as dd
 from user_inputs import get_inputs as gi, study_selection as ss
 from legacy_script import script_bridge as sb
-from oc_plots import plot_relays as pr
 from relays import elements
 from cond_damage import conductor_damage as cd
 from save_results import save_result as sr
 from config_logging import configure_logging as cl
 from colour_maps import colour_maps as cm
+from oc_plots import plot_relay
 from importlib import reload
 
 reload(model_checks)
 reload(gi)
 reload(gop)
 reload(fs)
-reload(pr)
 reload(elements)
 reload(cd)
 reload(sr)
@@ -70,6 +69,7 @@ reload(ss)
 reload(sb)
 reload(find_sub)
 reload(cm)
+reload(plot_relay)
 
 
 def main(app: pft.Application) -> None:
@@ -104,6 +104,11 @@ def main(app: pft.Application) -> None:
         >>> with helper.app_manager(app, gui=True) as app:
         ...     main(app)
     """
+
+
+    study_case = app.GetActiveStudyCase()
+    graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
+
     # Get study type selection from user
     study_selections = ss.get_study_selections(app)
 
@@ -159,7 +164,7 @@ def main(app: pft.Application) -> None:
                 cd.cond_damage(app, selected_devices)
 
             if 'Protection Relay Coordination Plot' in study_selections:
-                pr.plot_all_relays(app, feeder, selected_devices)
+                plot_relay.plot_all_relays(app, feeder, selected_devices)
 
     # Generate outputs
     if "Fault Level Study (legacy)" in study_selections:
