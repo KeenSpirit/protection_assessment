@@ -199,11 +199,9 @@ def _get_bound(num: float, bound: str) -> float:
     Returns:
         Rounded value for axis limit.
     """
-    order_of_mag = 10 ** int(math.log10(num))
+    log_value = math.log10(num)
 
     if bound == 'Min':
-        return math.floor(int(math.log10(num)))
-        # return math.floor(num / order_of_mag) * order_of_mag
+        return 10 ** math.floor(log_value)
     else:
-        return math.ceil(int(math.log10(num)))
-        # return math.ceil(num / order_of_mag) * order_of_mag
+        return 10 ** math.ceil(log_value)
