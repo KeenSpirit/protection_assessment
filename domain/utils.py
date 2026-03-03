@@ -64,3 +64,34 @@ def populate_fault_currents(terminal: "Termination") -> None:
             two_phase=terminal.min_fl_2ph or 0,
             phase_ground=terminal.min_fl_pg or 0
         )
+
+
+def conductors_properties():
+    """
+    A dictionary with all conductor 1 second fault current ratings
+    """
+    cond_csv = r"\\ntgcca1\ntdpe\PROTECTION\STAFF\Dan Park\PowerFactory\Dan script development\protection_assessment\docs\ratings_lookup.csv"
+    csv_open = open(f"{cond_csv}\\Static Line Rating Calculator.csv", "r")
+    cond_rating_dict = {}
+    for row in csv_open.readlines():
+        conductor_type = row.split(",")[0]
+        if "Typcon" in conductor_type:
+            continue
+        no_reclose = row.split(",")[1]
+        reclose5shot1 = row.split(",")[2]
+        reclose5shot2 = row.split(",")[4]
+        reclose5shot3 = row.split(",")[6]
+        reclose20shot1 = row.split(",")[8]
+        reclose20shot2 = row.split(",")[9]
+        reclose20shot3 = row.split(",")[10]
+        cond_rating_dict[conductor_type] = [
+            no_reclose,
+            reclose5shot1,
+            reclose5shot2,
+            reclose5shot3,
+            density,
+            reclose20shot1,
+            reclose20shot2,
+            reclose20shot3,
+        ]
+    return cond_rating_dict

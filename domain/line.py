@@ -8,6 +8,8 @@ and conductor damage assessment results.
 from dataclasses import dataclass
 from typing import Optional, Union, TYPE_CHECKING
 
+import domain.utils as utils
+
 if TYPE_CHECKING:
     from pf_config import pft
 
@@ -176,8 +178,13 @@ def _get_conductor_info(line: "pft.ElmLne") -> tuple:
     """
     Get conductor type name and thermal rating.
 
-    For overhead lines (TypGeo, TypLne), extracts the conductor type
-    name and 1-second thermal rating. For cable systems, returns "NA"
+    For overhead lines, extracts the conductor type
+    name and obtains 1-second thermal rating from csv file.
+
+    For underground lines, extracts the conductor type
+    name and 1-second thermal rating from PowerFactory.
+
+    For cable systems, returns "NA"
     for both values.
 
     Args:
@@ -188,11 +195,51 @@ def _get_conductor_info(line: "pft.ElmLne") -> tuple:
     """
     construction = line.typ_id.GetClassName()
 
-    if construction == "TypGeo":
+    oh_lines = [
+        line
+        for line in active_lines(app, True)
+        if not line.IsCable()
+        if "CABLE" not in line.loc_name
+        if not line.typ_id.HasAttribute("cohl_")
+    ]
+
+    line_type = "NA"
+    thermal_rating = "NA"
+
+    cond_rating_dict = utils.conductors_properties
+    if line in oh_lines:
         typ_con = line.GetAttribute("e:pCondCir")
-        return typ_con.loc_name, round(typ_con.GetAttribute("e:Ithr"), 3) * 1000
-    elif construction == "TypLne":
-        return line.typ_id.loc_name, round(line.typ_id.GetAttribute("e:Ithr"), 3) * 1000
+        line_type = typ_con.loc_name
+        for cond, data in cond_rating_dict.items():
+            if line_type in cond:
+                thermal_rating = None
+                break
     else:
-        # Cable systems - thermal rating handled differently
-        return "NA", "NA"
+        if construction == "TypGeo":
+            typ_con = line.GetAttribute("e:pCondCir")
+            line_type =  typ_con.loc_name
+            thermal_rating = round(typ_con.GetAttribute("e:Ithr"), 3) * 1000
+        elif construction == "TypLne":
+            typ_con = line.GetAttribute("e:typ_id")
+            line_type = typ_con.loc_name
+            thermal_rating = round(typ_con.GetAttribute("e:Ithr"), 3) * 1000
+        else:
+            # Cable systems - thermal rating handled differently
+            pass
+    return line_type, thermal_rating
+
+
+def active_lines(app, reset):
+    """Return all the active lines in the project."""
+    if reset:
+        app.ResetCalculation()
+    all_active_lines = []
+    for grid in app.GetSummaryGrid().GetContents():
+        all_active_lines += [
+            line
+            for line in grid.obj_id.GetContents("*.ElmLne")
+            if "HV" in line.loc_name or "TR" in line.loc_name or "LN" in line.loc_name
+            if not line.IsOutOfService()
+            if line.IsEnergized()
+        ]
+    return all_active_lines

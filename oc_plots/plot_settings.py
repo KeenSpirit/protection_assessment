@@ -139,7 +139,7 @@ def axis_settings(pltlinebarplot, f_type: str, devices: List[dd.Device]):
     pltlinebarplot.SetAxisSharingLevelX(0)
     pltlinebarplot.SetAxisSharingLevelY(0)
     pltlinebarplot.SetScaleTypeX(1)
-    pltlinebarplot.SetScaleTypeY(0)
+    pltlinebarplot.SetScaleTypeY(1)
 
     if f_type == 'Ground':
         x_min = _get_bound(devices[0].min_fl_pg, bound='Min')
@@ -149,7 +149,7 @@ def axis_settings(pltlinebarplot, f_type: str, devices: List[dd.Device]):
         x_min = _get_bound(devices[0].min_fl_2ph, bound='Min')
         x_max = _get_bound(max_fl_ph, bound='Max')
     pltlinebarplot.SetScaleX(x_min, x_max)
-    pltlinebarplot.SetScaleY(0, 10)
+    pltlinebarplot.SetScaleY(0.01, 10)
 
 
 def title_settings(pltlinebarplot, plot_name: str) -> None:

@@ -60,6 +60,7 @@ def get_study_selections(app: pft.Application) -> List[str]:
             - "Fault Level Study (legacy)"
             - "Fault Level Study (no relays configured in model)"
             - "Fault Level Study (all relays configured in model)"
+            - "Update TOC Plot Curve Labels"
 
         Possible additional options (only with 'all relays'):
             - "Conductor Damage Assessment"
@@ -145,6 +146,14 @@ def get_study_selections(app: pft.Application) -> List[str]:
     )
     coordination_plot_cb.grid(row=7, column=0, sticky="w", padx=50, pady=2)
 
+    tk.Radiobutton(
+        root,
+        text="Update TOC Plot Curve Labels",
+        value="5",
+        variable=selection,
+        command=lambda: on_radio_change()
+    ).grid(row=8, column=0, sticky="w", padx=30, pady=5)
+
     def on_radio_change():
         """Enable/disable checkboxes based on radio button selection."""
         if selection.get() == "4":
@@ -157,7 +166,7 @@ def get_study_selections(app: pft.Application) -> List[str]:
             coordination_plot_cb.config(state='disabled')
 
     info_frame = ttk.LabelFrame(root, text="Information", padding=(10, 5))
-    info_frame.grid(row=8, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+    info_frame.grid(row=9, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
 
     info_text = (
         "At script completion, the location of saved study results files\n"
@@ -169,11 +178,11 @@ def get_study_selections(app: pft.Application) -> List[str]:
 
     ttk.Button(
         root, text='Okay', command=lambda: root.destroy()
-    ).grid(row=9, column=0, sticky="w", padx=5, pady=5)
+    ).grid(row=10, column=0, sticky="w", padx=5, pady=5)
 
     ttk.Button(
         root, text='Exit', command=lambda: exit_script(root, app)
-    ).grid(row=9, column=1, sticky="w", padx=5, pady=5)
+    ).grid(row=10, column=1, sticky="w", padx=5, pady=5)
 
     root.mainloop()
 
@@ -182,7 +191,8 @@ def get_study_selections(app: pft.Application) -> List[str]:
         "1": "Find Feeder Open Points",
         "2": "Fault Level Study (legacy)",
         "3": "Fault Level Study (no relays configured in model)",
-        "4": "Fault Level Study (all relays configured in model)"
+        "4": "Fault Level Study (all relays configured in model)",
+        "5": "Update TOC Plot Curve Labels"
     }
 
     result = []

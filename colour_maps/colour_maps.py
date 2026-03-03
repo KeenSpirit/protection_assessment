@@ -226,8 +226,8 @@ def get_reach_threshold(
 
 
 def get_active_lines(
-        project: "DataObject"
-) -> list["DataObject"]:
+        project: object
+) -> list[object]:
     """
     Retrieve all line elements connected to the grid.
 

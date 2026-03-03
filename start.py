@@ -56,6 +56,7 @@ from save_results import save_result as sr
 from config_logging import configure_logging as cl
 from colour_maps import colour_maps as cm
 from oc_plots import plot_relay
+from plot_curve_labels import curve_labels
 from importlib import reload
 
 reload(model_checks)
@@ -70,6 +71,7 @@ reload(sb)
 reload(find_sub)
 reload(cm)
 reload(plot_relay)
+reload(curve_labels)
 
 
 def main(app: pft.Application) -> None:
@@ -99,20 +101,16 @@ def main(app: pft.Application) -> None:
         - Creates Excel output files
         - Creates graphics board plots (if selected)
         - Creates colour scheme definitions (if applicable)
+        - Updates TOC plot curve labels (if selected)
 
     Example:
         >>> with helper.app_manager(app, gui=True) as app:
         ...     main(app)
     """
 
-
-    study_case = app.GetActiveStudyCase()
-    graphics_board = app.GetFromStudyCase("Graphics Board.SetDesktop")
-
     # Get study type selection from user
     study_selections = ss.get_study_selections(app)
 
-    # Route: Find PowerFactory Project
     if "Find PowerFactory Project" in study_selections:
         find_sub.get_project(app)
         return
@@ -123,9 +121,12 @@ def main(app: pft.Application) -> None:
         app.PrintWarn("No Active Project, Ending Script")
         return
 
-    # Route: Find Feeder Open Points
     if "Find Feeder Open Points" in study_selections:
         gop.main(app)
+        return
+
+    if "Update TOC Plot Curve Labels" in study_selections:
+        curve_labels.main(app, prjt)
         return
 
     # Run model validation checks
