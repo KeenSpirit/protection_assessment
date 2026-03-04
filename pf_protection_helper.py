@@ -257,6 +257,24 @@ def obtain_region(app: pft.Application) -> str:
     raise RuntimeError(msg)
 
 
+def active_lines(app, reset):
+    """
+    Return all the active lines in the project.
+    """
+    if reset:
+        app.ResetCalculation()
+    all_active_lines = []
+    for grid in app.GetSummaryGrid().GetContents():
+        all_active_lines += [
+            line
+            for line in grid.obj_id.GetContents("*.ElmLne")
+            if "HV" in line.loc_name or "TR" in line.loc_name or "LN" in line.loc_name
+            if not line.IsOutOfService()
+            if line.IsEnergized()
+        ]
+    return all_active_lines
+
+
 def create_obj(parent, obj_name: str, obj_class: str):
 
     obj = parent.GetContents(f"{obj_name}.{obj_class}")

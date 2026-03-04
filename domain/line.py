@@ -90,7 +90,10 @@ class Line:
     pg_fl: Optional[float] = None
 
 
-def initialise_line_dataclass(elmlne: "pft.ElmLne") -> Optional[Line]:
+def initialise_line_dataclass(
+    elmlne: "pft.ElmLne",
+    oh_lines: Optional[set] = None,
+) -> Optional[Line]:
     """
     Initialize a Line dataclass from a PowerFactory ElmLne object.
 
@@ -115,7 +118,9 @@ def initialise_line_dataclass(elmlne: "pft.ElmLne") -> Optional[Line]:
     if elmlne is None:
         return None
 
-    line_type, thermal_rating = _get_conductor_info(elmlne)
+    line_type, thermal_rating = _get_conductor_info(
+        elmlne, oh_lines=oh_lines
+    )
 
     return Line(
         obj=elmlne,
@@ -174,7 +179,10 @@ def _get_voltage(line: "pft.ElmLne") -> float:
     return 0.0
 
 
-def _get_conductor_info(line: "pft.ElmLne") -> tuple:
+def _get_conductor_info(
+    line: "pft.ElmLne",
+    oh_lines: Optional[set] = None,
+) -> tuple:
     """
     Get conductor type name and thermal rating.
 
@@ -195,24 +203,17 @@ def _get_conductor_info(line: "pft.ElmLne") -> tuple:
     """
     construction = line.typ_id.GetClassName()
 
-    oh_lines = [
-        line
-        for line in active_lines(app, True)
-        if not line.IsCable()
-        if "CABLE" not in line.loc_name
-        if not line.typ_id.HasAttribute("cohl_")
-    ]
-
     line_type = "NA"
     thermal_rating = "NA"
 
-    cond_rating_dict = utils.conductors_properties
-    if line in oh_lines:
+    cond_rating_dict = utils.conductors_properties()
+
+    if oh_lines is not None and line in oh_lines:
         typ_con = line.GetAttribute("e:pCondCir")
         line_type = typ_con.loc_name
         for cond, data in cond_rating_dict.items():
             if line_type in cond:
-                thermal_rating = None
+                thermal_rating = int(data[0])
                 break
     else:
         if construction == "TypGeo":
@@ -227,19 +228,3 @@ def _get_conductor_info(line: "pft.ElmLne") -> tuple:
             # Cable systems - thermal rating handled differently
             pass
     return line_type, thermal_rating
-
-
-def active_lines(app, reset):
-    """Return all the active lines in the project."""
-    if reset:
-        app.ResetCalculation()
-    all_active_lines = []
-    for grid in app.GetSummaryGrid().GetContents():
-        all_active_lines += [
-            line
-            for line in grid.obj_id.GetContents("*.ElmLne")
-            if "HV" in line.loc_name or "TR" in line.loc_name or "LN" in line.loc_name
-            if not line.IsOutOfService()
-            if line.IsEnergized()
-        ]
-    return all_active_lines

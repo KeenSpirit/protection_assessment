@@ -5,6 +5,8 @@ This module contains functions that operate on domain models but don't
 belong to a specific model class.
 """
 
+from functools import lru_cache
+
 from typing import TYPE_CHECKING
 
 from domain.fault_data import FaultCurrents
@@ -66,12 +68,21 @@ def populate_fault_currents(terminal: "Termination") -> None:
         )
 
 
+@lru_cache(maxsize=1)
 def conductors_properties():
     """
-    A dictionary with all conductor 1 second fault current ratings
+    A dictionary with all conductor 1 second fault
+    current ratings. Cached after first call.
     """
-    cond_csv = r"\\ntgcca1\ntdpe\PROTECTION\STAFF\Dan Park\PowerFactory\Dan script development\protection_assessment\docs\ratings_lookup.csv"
-    csv_open = open(f"{cond_csv}\\Static Line Rating Calculator.csv", "r")
+    cond_csv = (
+        r"\\ntgcca1\ntdpe\PROTECTION\STAFF\Dan Park"
+        r"\PowerFactory\Dan script development"
+        r"\protection_assessment\docs\ratings_lookup.csv"
+    )
+    csv_open = open(
+        f"{cond_csv}\\Static Line Rating Calculator.csv",
+        "r"
+    )
     cond_rating_dict = {}
     for row in csv_open.readlines():
         conductor_type = row.split(",")[0]
@@ -94,4 +105,5 @@ def conductors_properties():
             reclose20shot2,
             reclose20shot3,
         ]
+    csv_open.close()
     return cond_rating_dict

@@ -290,6 +290,13 @@ def get_device_sections(devices: List[dd.Device]) -> None:
     devices_loads = {device.term: device.sect_loads for device in devices}
     devices_lines = {device.term: device.sect_lines for device in devices}
 
+    oh_lines_set = set(
+        ln for ln in helper.active_lines(app, True)
+        if not ln.IsCable()
+        if "CABLE" not in ln.loc_name
+        if not ln.typ_id.HasAttribute("cohl_")
+    )
+
     # Apply sectioning and convert to dataclasses
     for device in devices:
         section_terms = _sections(devices_terms)[device.term]
@@ -308,7 +315,9 @@ def get_device_sections(devices: List[dd.Device]) -> None:
 
         section_lines = _sections(devices_lines)[device.term]
         dataclass_lines = [
-            dd.initialise_line_dataclass(elmlne)
+            dd.initialise_line_dataclass(
+                elmlne, oh_lines=oh_lines_set
+            )
             for elmlne in section_lines
         ]
         device.sect_lines = dataclass_lines
