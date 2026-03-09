@@ -7,7 +7,6 @@ in the electrical network domain.
 
 Modules:
     enums: Element types, construction types, fault types
-    fault_data: Immutable fault current containers
     feeder: Distribution feeder model
     device: Protection device model (relays, fuses)
     termination: Network terminal model
@@ -38,9 +37,6 @@ Example:
     >>> # Check element types
     >>> if device.obj.GetClassName() == dd.ElementType.RELAY.value:
     ...     print("This is a relay")
-    >>>
-    >>> # After fault studies, populate immutable containers
-    >>> dd.populate_fault_currents(terminal)
 """
 
 # =============================================================================
@@ -53,12 +49,6 @@ from domain.enums import (
     FaultType,
     ph_attr_lookup,
 )
-
-# =============================================================================
-# FAULT DATA
-# =============================================================================
-
-from domain.fault_data import FaultCurrents
 
 # =============================================================================
 # DOMAIN MODELS
@@ -74,7 +64,7 @@ from domain.transformer import Tfmr, initialise_load_dataclass
 # UTILITIES
 # =============================================================================
 
-from domain.utils import populate_fault_currents
+from domain.utils import conductors_properties
 
 # =============================================================================
 # PUBLIC API
@@ -86,8 +76,6 @@ __all__ = [
     "ConstructionType",
     "FaultType",
     "ph_attr_lookup",
-    # Fault data
-    "FaultCurrents",
     # Domain models
     "Feeder",
     "Device",
@@ -101,5 +89,5 @@ __all__ = [
     "initialise_line_dataclass",
     "initialise_load_dataclass",
     # Utilities
-    "populate_fault_currents",
+    "conductors_properties",
 ]

@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 
 from domain.enums import ph_attr_lookup
-from domain.fault_data import FaultCurrents
 
 if TYPE_CHECKING:
     from pf_config import pft
@@ -52,16 +51,10 @@ class Termination:
         min_sn_fl_pg10: Min sys normal PG fault with 10 ohm resistance (A)
         min_sn_fl_pg50: Min sys normal PG fault with 50 ohm resistance (A)
 
-    Grouped Fault Data (set after fault studies complete):
-        max_faults: Immutable FaultCurrents container for maximum values
-        min_faults: Immutable FaultCurrents container for minimum values
-
     Example:
         >>> term = initialise_term_dataclass(elm_term)
         >>> # After fault studies:
         >>> print(f"Max PG fault at {term.obj.loc_name}: {term.max_fl_pg}A")
-        >>> if term.max_faults:
-        ...     print(f"Max phase fault: {term.max_faults.max_phase}A")
     """
     # Core identification - always required
     obj: "pft.ElmTerm"
@@ -90,10 +83,6 @@ class Termination:
     min_sn_fl_pg: Optional[float] = None
     min_sn_fl_pg10: Optional[float] = None
     min_sn_fl_pg50: Optional[float] = None
-
-    # Grouped fault data containers (set after fault studies)
-    max_faults: Optional[FaultCurrents] = None
-    min_faults: Optional[FaultCurrents] = None
 
 
 def initialise_term_dataclass(elmterm: "pft.ElmTerm") -> Optional[Termination]:

@@ -99,9 +99,9 @@ class FaultLevelStudy:
                 - external_grid: Dict of grid objects to fault level
                   parameter lists.
         """
-        radial_list, lines_oos = self.mesh_feeder_check()
+        radial_list, mesh_feeder = self.mesh_feeder_check()
         feeder_list, external_grid = self.feeders_external_grid(
-            radial_list, lines_oos
+            radial_list, mesh_feeder
         )
 
         if 'Fault Level Study (all relays configured in model)' in (
@@ -153,49 +153,55 @@ class FaultLevelStudy:
         Returns:
             Tuple containing:
                 - radial_list: Sorted list of radial feeder names.
-                - lines_oos: True if any lines are out of service.
+                - mesh_feeder_check: True if any lines are out of service.
         """
         self.app.PrintPlain("Checking for radial feeders...")
-        grids = self.app.GetCalcRelevantObjects('*.ElmXnet')
-        all_feeders = self.app.GetCalcRelevantObjects('*.ElmFeeder')
+        grids = [
+                grid for grid in self.app.GetCalcRelevantObjects('*.ElmXnet')
+                if grid.outserv == 0
+            ]
+        all_feeders = [fdr for fdr in self.app.GetCalcRelevantObjects('*.ElmFeeder')
+                       if fdr.GetAll()
+                       and not fdr.IsOutOfService()]
 
-        lines_oos = False
+        radial_list = []
+        mesh_list = []
         for feeder in all_feeders:
-            if self.get_lines_oos(feeder):
-                lines_oos = True
-                self.app.PrintWarn(
-                    "WARNING: The following feeders have lines out of "
-                    "service.\n"
-                    "These feeders will not appear in the selections list "
-                    "if the lines serve as open points. \n"
-                    "To remedy this, return the lines to service and place "
-                    "an open switch at one end of each line."
-                )
-                break
-
-        for feeder in all_feeders:
-            if self.get_lines_oos(feeder):
-                str_lines = [line.loc_name for line in self.get_lines_oos(
-                    feeder
-                )]
-                self.app.PrintWarn(f"Feeder: {feeder.loc_name}")
-                self.app.PrintWarn(f"Lines out of service: {str_lines}")
-
-        radial_list = [
-            feeder.loc_name for feeder in all_feeders
-            if not (
+            if (
                 set(feeder.obj_id.GetAll(1, 0)) & set(grids)
                 and set(feeder.obj_id.GetAll(0, 0)) & set(grids)
-                and not feeder.IsOutOfService()
-            )
-        ]
+            ):
+                mesh_list.append(feeder)
+            else:
+                radial_list.append(feeder.loc_name )
 
         if radial_list:
             self.app.PrintPlain("Radial feeders detected.")
         else:
             self.show_no_radial_feeders_message()
 
-        return sorted(radial_list), lines_oos
+        mesh_feeder_check = False
+        if mesh_list:
+            mesh_feeder_check = True
+            self.app.PrintWarn(
+                "The following feeders were identified as meshed (indicating that an external grid is in service.\n"
+                "both upstream and downstream of the feeder cubicle):"
+            )
+            for feeder in mesh_list:
+                self.app.PrintWarn(f"{feeder.loc_name}")
+                if self.get_lines_oos(feeder):
+                    str_lines = [line.loc_name for line in self.get_lines_oos(
+                        feeder
+                    )]
+                    self.app.PrintWarn(
+                        f"{feeder.loc_name} has the following lines out of service:\n"
+                        f"{str_lines} \n"
+                        "If any of these lines serve as open points, the feeder will be treated as meshed.\n"
+                        "To remedy this, return the lines to service and place "
+                        "an open switch at one end of each line."
+                        )
+
+        return sorted(radial_list), mesh_feeder_check
 
     def get_lines_oos(self, feeder: pft.ElmFeeder) -> List:
         """
@@ -275,7 +281,7 @@ class FaultLevelStudy:
         sys.exit(0)
 
     def feeders_external_grid(
-        self, radial_list: List[str], lines_oos: bool
+        self, radial_list: List[str], mesh_feeders: bool
     ) -> Tuple[List[str], Dict[str, List[float]]]:
         """
         Display combined feeder selection and external grid data dialog.
@@ -286,7 +292,7 @@ class FaultLevelStudy:
 
         Args:
             radial_list: List of available radial feeder names.
-            lines_oos: Flag indicating if lines are out of service.
+            mesh_feeders: Flag indicating if presence of mesh feeders.
 
         Returns:
             Tuple containing:
@@ -323,7 +329,7 @@ class FaultLevelStudy:
         button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
         list_length, var, grid_entries, grids = self.populate_feeders(
-            root, inner_frame, radial_list, button_frame, lines_oos
+            root, inner_frame, radial_list, button_frame, mesh_feeders
         )
 
         # Resize window to fit content
@@ -343,13 +349,13 @@ class FaultLevelStudy:
             radial_list[i] for i in range(list_length) if var[i].get() == 1
         ]
         if not feeder_list:
-            return self.window_error(radial_list, 3, lines_oos)
+            return self.window_error(radial_list, 3, mesh_feeders)
 
         new_grid_data = self.collect_grid_data(
-            grid_entries, radial_list, lines_oos
+            grid_entries, radial_list, mesh_feeders
         )
         if not self.validate_grid_data(new_grid_data):
-            return self.window_error(radial_list, 1, lines_oos)
+            return self.window_error(radial_list, 1, mesh_feeders)
 
         self.update_grid_data(grids, new_grid_data)
 
@@ -471,7 +477,7 @@ class FaultLevelStudy:
         frame: tk.Frame,
         radial_list: List[str],
         button_frame: tk.Frame,
-        lines_oos: bool = False
+        mesh_feeders: bool = False
     ) -> Tuple[int, List[tk.IntVar], Dict, List]:
         """
         Create feeder selection and external grid entry widgets.
@@ -506,10 +512,10 @@ class FaultLevelStudy:
         ).grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="w")
 
         current_row = 2
-        if lines_oos:
+        if mesh_feeders:
             ttk.Label(
                 frame,
-                text="Note: feeders with lines out of service were detected.",
+                text="Note: mesh feeders were detected.",
                 font='Helvetica 10 bold',
                 wraplength=250
             ).grid(
@@ -531,6 +537,7 @@ class FaultLevelStudy:
         grids = [
             grid for grid in self.app.GetCalcRelevantObjects('*.ElmXnet')
             if grid.outserv == 0
+            and grid.GetAttribute('bus1') is not None
         ]
         grid_data = self.get_grid_data(grids)
         self.app.PrintPlain("Please enter the requested inputs.")
@@ -833,7 +840,7 @@ class FaultLevelStudy:
         self,
         grid_entries: Dict,
         radial_list: List[str],
-        lines_oos: bool
+        mesh_feeders: bool
     ) -> Dict:
         """
         Collect values from grid entry fields.
@@ -845,7 +852,7 @@ class FaultLevelStudy:
             grid_entries: Dict of grid objects to entry field lists.
             radial_list: List of radial feeder names (for error
                 recovery).
-            lines_oos: Lines out of service flag (for error recovery).
+            mesh_feeders: mesh feeders flag (for error recovery).
 
         Returns:
             Dict mapping grid objects to lists of entered values.
@@ -857,7 +864,7 @@ class FaultLevelStudy:
                     item.get() for item in grid_entries[grid]
                 ]
             except Exception:
-                return self.window_error(radial_list, 2, lines_oos)
+                return self.window_error(radial_list, 2, mesh_feeders)
         return new_grid_data
 
     def validate_grid_data(self, new_grid_data: Dict) -> bool:
@@ -897,13 +904,16 @@ class FaultLevelStudy:
         ]
 
         for grid in grids:
-            for attr, value in zip(attributes, new_grid_data[grid]):
-                setattr(grid, attr, value)
+            try:
+                for attr, value in zip(attributes, new_grid_data[grid]):
+                    setattr(grid, attr, value)
+            except AttributeError:
+                pass
             grid.cmax = 1.1
             grid.cmin = 1
 
     def window_error(
-        self, radial_list: List[str], error_code: int, lines_oos: bool
+        self, radial_list: List[str], error_code: int, mesh_feeders: bool
     ) -> Tuple[List[str], Dict]:
         """
         Display error message and re-prompt user for input.
@@ -917,7 +927,7 @@ class FaultLevelStudy:
                 1 = Fault level in wrong units (A instead of kA)
                 2 = Non-numerical value entered
                 3 = No feeder selected
-            lines_oos: Lines out of service flag.
+            mesh_feeders: mesh_feeders flag.
 
         Returns:
             Result of re-prompting feeders_external_grid dialog.
@@ -928,7 +938,7 @@ class FaultLevelStudy:
             3: "Please select at least one feeder to continue"
         }
         self.app.PrintPlain(error_messages[error_code])
-        return self.feeders_external_grid(radial_list, lines_oos)
+        return self.feeders_external_grid(radial_list, mesh_feeders)
 
     def get_feeders_devices(
         self, radial_list: List[str]

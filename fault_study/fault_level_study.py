@@ -76,7 +76,7 @@ def fault_study(
     get_downstream_objects(app, feeder.devices)
     us_ds_device(feeder.devices, feeder.bu_devices)
     get_ds_capacity(feeder.devices)
-    get_device_sections(feeder.devices)
+    get_device_sections(app, feeder.devices)
 
     # Define study configurations
     study_configs = [
@@ -120,11 +120,6 @@ def fault_study(
     # Update device and line data with results
     update_device_data(region, feeder.devices)
     update_line_data(app, region, feeder.devices)
-
-    # Populate immutable fault current containers
-    for device in feeder.devices:
-        for terminal in device.sect_terms:
-            dd.populate_fault_currents(terminal)
 
 
 def get_downstream_objects(
@@ -252,7 +247,7 @@ def get_ds_capacity(devices: List[dd.Device]) -> None:
         )
 
 
-def get_device_sections(devices: List[dd.Device]) -> None:
+def get_device_sections(app: pft.Application, devices: List[dd.Device]) -> None:
     """
     Partition network into protection sections for each device.
 
@@ -260,6 +255,7 @@ def get_device_sections(devices: List[dd.Device]) -> None:
     element is assigned to only its most immediate protection device.
 
     Args:
+        app: PowerFactory application instance.
         devices: List of Device dataclasses with downstream objects.
 
     Side Effects:
@@ -315,7 +311,7 @@ def get_device_sections(devices: List[dd.Device]) -> None:
 
         section_lines = _sections(devices_lines)[device.term]
         dataclass_lines = [
-            dd.initialise_line_dataclass(
+            dd.initialise_line_dataclass(app,
                 elmlne, oh_lines=oh_lines_set
             )
             for elmlne in section_lines
@@ -491,8 +487,7 @@ def grid_equivalance_check(new_grid_data: Dict) -> bool:
     return identical_grids
 
 
-def reset_min_source_imp(
-    new_grid_data: Dict,
+def reset_min_source_imp(new_grid_data: Dict,
     sys_norm_min: bool = False
 ) -> None:
     """

@@ -257,7 +257,7 @@ def obtain_region(app: pft.Application) -> str:
     raise RuntimeError(msg)
 
 
-def active_lines(app, reset):
+def active_lines(app: pft.Application, reset: bool) -> list:
     """
     Return all the active lines in the project.
     """

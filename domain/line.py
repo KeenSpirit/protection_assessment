@@ -13,6 +13,8 @@ import domain.utils as utils
 if TYPE_CHECKING:
     from pf_config import pft
 
+from importlib import reload
+reload(utils)
 
 @dataclass
 class Line:
@@ -90,7 +92,7 @@ class Line:
     pg_fl: Optional[float] = None
 
 
-def initialise_line_dataclass(
+def initialise_line_dataclass(app,
     elmlne: "pft.ElmLne",
     oh_lines: Optional[set] = None,
 ) -> Optional[Line]:
@@ -118,7 +120,7 @@ def initialise_line_dataclass(
     if elmlne is None:
         return None
 
-    line_type, thermal_rating = _get_conductor_info(
+    line_type, thermal_rating = _get_conductor_info(app,
         elmlne, oh_lines=oh_lines
     )
 
@@ -179,7 +181,7 @@ def _get_voltage(line: "pft.ElmLne") -> float:
     return 0.0
 
 
-def _get_conductor_info(
+def _get_conductor_info(app,
     line: "pft.ElmLne",
     oh_lines: Optional[set] = None,
 ) -> tuple:
@@ -212,8 +214,11 @@ def _get_conductor_info(
         typ_con = line.GetAttribute("e:pCondCir")
         line_type = typ_con.loc_name
         for cond, data in cond_rating_dict.items():
-            if line_type in cond:
-                thermal_rating = int(data[0])
+            app.PrintPlain(f"{cond}: {data}")
+            app.PrintPlain(f"line type: {line_type}")
+            if cond in line_type:
+                app.PrintPlain(f"PERFECT MATCH")
+                thermal_rating = float(data[0]) * 1000
                 break
     else:
         if construction == "TypGeo":
