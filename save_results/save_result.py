@@ -786,7 +786,12 @@ def ensure_numeric_types(df: pd.DataFrame) -> pd.DataFrame:
         if any(kw in col_str for kw in ['name', 'construction', 'site', 'device']):
             continue
 
-        df_numeric[col] = pd.to_numeric(df_numeric[col], errors='ignore')
+        # Attempt numeric conversion; leave the column untouched if it
+        # cannot be converted.
+        try:
+            df_numeric[col] = pd.to_numeric(df_numeric[col])
+        except (ValueError, TypeError):
+            continue
 
         # Convert whole numbers to integers
         if df_numeric[col].dtype in ['float64', 'float32']:

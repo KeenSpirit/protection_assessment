@@ -36,6 +36,7 @@ Functions:
 
 import logging
 import logging.config
+import sys
 import time
 from typing import Dict, List
 
@@ -205,11 +206,21 @@ def switch_study_case(
     """
     if user_selected_study_case is None:
         app.PrintError('Please select a study case and re-run the script.')
-        exit(1)
+        sys.exit(1)
 
     if all_grids:
         study_folder = app.GetProjectFolder("study")
-        int_case = study_folder.GetContents("All Active Grids Study Case")[0]
+        all_grids_cases = study_folder.GetContents(
+            "All Active Grids Study Case"
+        )
+        if not all_grids_cases:
+            app.PrintError(
+                "Study case 'All Active Grids Study Case' was not found "
+                "in the project study folder. Please create it and "
+                "re-run the script."
+            )
+            sys.exit(1)
+        int_case = all_grids_cases[0]
     else:
         int_case = user_selected_study_case
 
@@ -260,7 +271,9 @@ def cvrt_fdr_to_dataclass(
 
         devices = [dd.initialise_dev_dataclass(dev) for dev in devs]
         feeder.devices = devices
-        feeder.bu_devices = bu_devices
+        # Give each feeder its own copy so a future per-feeder mutation
+        # of bu_devices cannot bleed across feeders.
+        feeder.bu_devices = dict(bu_devices)
 
         feeders.append(feeder)
 

@@ -54,7 +54,7 @@ def relay_checks(app: pft.Application, relays: List) -> None:
 
         relay_issues_detected = relay_type_check(device, relay_issues_detected)
 
-        if not relay_issues_detected:
+        if device.loc_name not in relay_issues_detected:
             relay_issues_detected = ct_phase_check(device, relay_issues_detected)
 
     if relay_issues_detected:

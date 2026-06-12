@@ -108,11 +108,13 @@ def trip_count(
         # No recloser - return appropriate value
         return 2 if increment else 1
 
+    assert len(elmrecls) == 1, (
+            f'{device.loc_name} Multiple reclose elements found'
+            )
+
     recloser = elmrecls[0]
     if recloser.outserv or recloser.reclnotactive:
         return 2 if increment else 1
-
-    assert len(elmrecls) == 1, f'{device.obj} Multiple reclose elements found'
 
     if increment:
         recloser.starttimeframe += 1
@@ -155,7 +157,9 @@ def set_enabled_elements(
     if len(elmrecls) == 0:
         return None
 
-    assert len(elmrecls) == 1, 'Multiple reclose elements found'
+    assert len(elmrecls) == 1, (
+        f'{device.loc_name} Multiple reclose elements found'
+    )
     recloser = elmrecls[0]
 
     # Get block logic configuration from recloser type

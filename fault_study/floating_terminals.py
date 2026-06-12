@@ -58,7 +58,7 @@ def get_floating_terminals(
         for line in floating_lines:
             try:
                 t1, t2 = line.GetConnectedElements()
-            except AttributeError:
+            except (ValueError, AttributeError):
                 continue
 
             t3 = line.GetConnectedElements(1, 1, 0)

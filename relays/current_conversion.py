@@ -10,6 +10,7 @@ Functions:
     convert_to_i0: Convert to zero sequence current
 """
 
+import math
 
 def get_measured_current(
     element,
@@ -50,14 +51,14 @@ def get_measured_current(
 
     elif measure_type in ['3I0', 'S3I0']:
         # Earth current & sensitive earth current (3I0)
+        return convert_to_i0(fault_level, threei0=True)
+
+    elif measure_type in ['I0']:
+        # Zero sequence current
         return convert_to_i0(fault_level, threei0=False)
 
-    elif measure_type in ['I0', '1ph']:
-        # Zero sequence current & 1 phase current
-        return fault_level
-
-    elif measure_type in ['d1m']:
-        # 1 phase delta measurement
+    elif measure_type in ['d1m', '1ph']:
+        # 1 phase  & 1 phase delta measurement
         return fault_level
 
     elif measure_type in ['I2']:
@@ -95,56 +96,26 @@ def convert_to_i2(
         Returns 0 for 3-phase faults (balanced, no negative sequence).
 
     Theory:
-        For a 2-phase fault (B-C): Ia=0, Ib=-Ic
-        I2 = (Ia + a²Ib + aIc) / 3
-        where a = e^(j120°) = -0.5 + j0.866
+        Resolving each unbalanced fault into symmetrical components
+        reduces the negative sequence current to a fixed fraction of
+        the phase fault current:
+        - 2-phase fault: I2 = If / sqrt(3)
+        - Phase-ground fault: I2 = If / 3
+        3*I2 is returned when threei2 is True.
 
     Example:
         >>> i2 = convert_to_i2(1000, '2-Phase')
         >>> print(f"Negative sequence: {i2:.1f}A")
     """
     if fault_type == '2-Phase':
-        # 2-phase fault: Ia=0, Ib=+I, Ic=-I (approximately)
-        ia = complex(0, fault_current)
-        ib = complex(0, -fault_current)
+        i2 = fault_current / math.sqrt(3)
     elif fault_type == 'Phase-Ground':
-        # Phase-ground fault: Ia=I, Ib=0, Ic=0
-        ia = complex(0, fault_current)
-        ib = complex(0, 0)
+        i2 = fault_current / 3
     else:
         # 3-phase fault: balanced, no negative sequence
         return 0
 
-    ic = complex(0, 0)
-
-    # Symmetrical component transformation constants
-    a = complex(-0.5, 0.866)   # 120° rotation operator
-    a2 = complex(-0.5, -0.866)  # 240° rotation operator
-
-    # Calculate sequence component products
-    aib = ib * a
-    a2ib = ib * a2
-    aic = ic * a
-    a2ic = ic * a2
-
-    # Negative sequence current
-    ia2 = (ia + a2ib + aic) / 3
-    ib2 = ia2 * a
-    ic2 = ia2 * a2
-
-    # Get magnitudes
-    ia2_mag = abs(ia2)
-    ib2_mag = abs(ib2)
-    ic2_mag = abs(ic2)
-
-    if not threei2:
-        # Return average (they should be equal in magnitude)
-        result = (ia2_mag + ib2_mag + ic2_mag) / 3
-    else:
-        # Return 3*I2 (sum of magnitudes)
-        result = ia2_mag + ib2_mag + ic2_mag
-
-    return result
+    return 3 * i2 if threei2 else i2
 
 
 def convert_to_i0(fault_current: float, threei0: bool = False) -> float:
@@ -172,7 +143,8 @@ def convert_to_i0(fault_current: float, threei0: bool = False) -> float:
         >>> i0_3 = convert_to_i0(900, threei0=True)
         >>> print(f"3I0: {i0_3:.1f}A")  # 2700A
     """
+    i0 = fault_current / 3
     if threei0:
-        return 3 * fault_current
+        return 3 * i0
     else:
-        return fault_current
+        return i0

@@ -15,7 +15,7 @@ The assessment considers:
 Functions:
     cond_damage: Main entry point for conductor damage assessment
     fault_clear_times: Calculate clearing times across fault range
-    swer_transform: Transform fault currents for SWER protection
+    swer_fault_range: Adjust the fault-level range for SWER lines
     worst_case_energy: Find maximum energy fault condition
     fuse_clear_time: Calculate fuse operating time
     element_trip_time: Calculate relay element operating time
@@ -75,7 +75,7 @@ def cond_damage(app: pft.Application, devices: List) -> None:
         total_trips = reclose.get_device_trips(dev_obj)
 
         # Phase fault assessment
-        fault_type = '2-Phase'
+        line_fault_type = '2-Phase'
         app.PrintPlain(
             f"Performing phase fault conductor damage assessment "
             f"for {dev_obj.loc_name}..."
@@ -89,10 +89,10 @@ def cond_damage(app: pft.Application, devices: List) -> None:
             while trip_count <= total_trips:
                 block_service_status = reclose.set_enabled_elements(dev_obj)
                 min_fl_clear_times, _ = fault_clear_times(
-                    app, device, line, fl_step, fault_type
+                    app, device, line, fl_step, line_fault_type
                 )
                 max_energy, max_fl, max_clear_time = worst_case_energy(
-                    line, min_fl_clear_times, fault_type, device,False
+                    line, min_fl_clear_times, line_fault_type, device,False
                 )
 
                 reclose.reset_block_service_status(block_service_status)
@@ -104,7 +104,7 @@ def cond_damage(app: pft.Application, devices: List) -> None:
                     line.ph_fl = max_fl
                 else:
                     logging.info(
-                        f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
+                        f"{dev_obj.loc_name} {line_fault_type} trip {trip_count} "
                                  f"fault clearing time calculation error."
                     )
 
@@ -130,7 +130,7 @@ def cond_damage(app: pft.Application, devices: List) -> None:
                 transposition = (line_fault_type != device_fault_type)
 
                 max_energy, max_fl, max_clear_time = worst_case_energy(
-                    line, min_fl_clear_times, fault_type, device, transposition
+                    line, min_fl_clear_times, line_fault_type, device, transposition
                 )
 
                 reclose.reset_block_service_status(block_service_status)
@@ -142,7 +142,7 @@ def cond_damage(app: pft.Application, devices: List) -> None:
                     line.pg_fl = max_fl
                 else:
                     logging.info(
-                        f"{dev_obj.loc_name} {fault_type} trip {trip_count} "
+                        f"{dev_obj.loc_name} {line_fault_type} trip {trip_count} "
                                  f"fault clearing time calculation error."
                     )
 
@@ -184,15 +184,26 @@ def fault_clear_times(
         For earth faults, applies SWER transformation if applicable.
     """
 
+    if line.min_fl_2ph is None or line.max_fl_2ph is None:
+        logging.info(
+            f"{device.obj.loc_name} {fault_type} conductor damage "
+            f"skipped: missing line fault level data."
+        )
+    return {}, fault_type
+
     if fault_type in ['2-Phase', '3-Phase']:
         min_fl = line.min_fl_2ph
         max_fl = max(line.max_fl_2ph, line.max_fl_3ph)
     else:
         # Check if this is a SWER line,
         # and does the device see the same current?
-        min_fl, max_fl, fault_type = swer_transform(
+        min_fl, max_fl, fault_type = swer_fault_range(
             device, line, fault_type
         )
+
+    # range() requires integers
+    min_fl = int(min_fl)
+    max_fl = int(max_fl)
 
     device_obj = device.obj
     # Create a list of fault levels in the interval of min and max fault
@@ -244,7 +255,7 @@ def fault_clear_times(
     return min_fl_clear_times, fault_type
 
 
-def swer_transform(
+def swer_fault_range(
     device: Any,
     line: Any,
     fault_type: str
