@@ -49,7 +49,11 @@ def getpath(subdir: str = "PowerFactoryResults") -> Path:
     user = Path.home().name
     basepath = Path("//client/c$/Users") / user
 
-    if basepath.exists():
+    try:
+        basepath_exists = basepath.exists()
+    except OSError as err:
+        basepath_exists = False
+    if basepath_exists:
         clientpath = basepath / subdir
     else:
         clientpath = Path("c:/Users") / user / subdir

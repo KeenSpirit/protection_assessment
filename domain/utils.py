@@ -20,9 +20,9 @@ def conductors_properties():
     current ratings. Cached after first call.
     """
     cond_csv = (
-        r"\\ntgcca1\ntdpe\PROTECTION\STAFF\Dan Park"
-        r"\PowerFactory\Dan script development"
-        r"\protection_assessment\docs"
+        r"\\ecasd01\WksMgmt\PowerFactory"
+        r"\ScriptsDEV\ProtectionAssessment"
+        r"\docs"
     )
     csv_open = open(
         f"{cond_csv}\\ratings_lookup.csv",

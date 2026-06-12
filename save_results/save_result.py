@@ -34,14 +34,85 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 from pf_config import pft
+import domain as dd
 from fault_study import fault_impedance
 from relays.reach_factors import device_reach_factors
+from relays.elements import get_prot_elements
 from save_results import cond_dmg_results as cd
 from importlib import reload
 
 reload(fault_impedance)
 reload(cd)
 
+# =============================================================================
+# OUTPUT PATH RESOLUTION
+# =============================================================================
+
+def _resolve_output_path(app: pft.Application) -> Path:
+    """
+    Resolve the output directory for the Excel results file.
+
+    Probes the Citrix client path first and falls back to the local
+    path if the probe fails. The probe is guarded against ``OSError``
+    to handle cases where ``\\\\client\\c$\\`` is partially reachable
+    but unstable — this occurs when Citrix client drive mapping is
+    disabled by policy, the user's endpoint (e.g. a VM) is not
+    configured to expose its local drive, or the Citrix session
+    experiences a transient network fault during the probe.
+
+    When the fallback is triggered by an OSError, a warning is
+    surfaced via ``app.PrintWarn`` to alert the user that files will
+    be written inside the Citrix session and may not persist after
+    logoff.
+
+    Args:
+        app: PowerFactory application instance, used for warning
+            output.
+
+    Returns:
+        Path to the output directory.
+
+    Note:
+        Attempts paths in order:
+            1. //client/c$/LocalData/{username}/ (Citrix)
+            2. c:/LocalData/{username}/ (Local)
+    """
+    user = Path.home().name
+    basepath = Path('//client/c$/LocalData') / user
+
+    try:
+        basepath_exists = basepath.exists()
+        probe_failed = False
+    except OSError as err:
+        # Citrix client drive mapping unavailable or network flaky.
+        # Covers WinError 53, 64, 67, 1231 and similar transient
+        # network errors that Path.exists() does not swallow.
+        basepath_exists = False
+        probe_failed = True
+        app.PrintWarn(
+            f"Citrix client path '{basepath}' could not be probed "
+            f"({err}). Falling back to local path. If running via "
+            f"Citrix, output files will be written inside the Citrix "
+            f"session and may not persist after logoff — retrieve "
+            f"them before ending the session."
+        )
+
+    if basepath_exists:
+        return basepath
+
+    local_path = Path('c:/LocalData') / user
+
+    # Only warn about a missing local path when the Citrix probe
+    # actually succeeded and reported 'does not exist' (i.e. the
+    # user is likely on a local install). If the probe raised, the
+    # warning above has already been emitted.
+    if not probe_failed and not local_path.exists():
+        app.PrintWarn(
+            f"Local output path '{local_path}' does not exist. "
+            f"The results file may fail to save."
+        )
+
+    return local_path
 
 # =============================================================================
 # MAIN ENTRY POINT
@@ -97,14 +168,9 @@ def save_dataframe(
     filename = f'Fault Study Results {study_case_name} {date_string}.xlsx'
     filename = fix_string(filename)
 
-    # Determine output path
-    user = Path.home().name
-    basepath = Path('//client/c$/LocalData') / user
-
-    if basepath.exists():
-        clientpath = basepath
-    else:
-        clientpath = Path('c:/LocalData') / user
+    # Determine output path (guarded against Citrix client drive
+    # mapping failures)
+    clientpath = _resolve_output_path(app)
 
     filepath = os.path.join(clientpath, filename)
 
@@ -179,17 +245,15 @@ def save_dataframe(
                 f"{str(feeder)} Detailed Results"
             )
 
-            for j, device in enumerate(dfls_list):
-                count = (j + 1) * 27 - 27
+            count = 0
+            for device in dfls_list:
                 device_name = (
                     str(device.columns[1])
                     if len(device.columns) > 1
                     else "Unknown Device"
                 )
-
                 device = clean_dataframe(device)
                 device = ensure_numeric_types(device)
-
                 device.to_excel(
                     writer,
                     sheet_name=safe_feeder_name,
@@ -206,6 +270,7 @@ def save_dataframe(
                     f"{start_col}1",
                     f'Primary protection: {device_name}'
                 )
+                count = count + (len(device.columns) + 2)
 
             # Conductor Damage Results
             if 'Conductor Damage Assessment' in study_selections:
@@ -457,7 +522,7 @@ def format_detailed_results(
         # Calculate reach factors
         dev_reach_factors = device_reach_factors(region, device, elements)
 
-        df = pd.DataFrame({
+        fault_levels = {
             'Tfmr Size (kVA)': [None] * len(elements),
             device_name: [e.obj.loc_name for e in elements],
             'Construction': [e.constr for e in elements],
@@ -468,24 +533,39 @@ def format_detailed_results(
             'Min 2P fault': [safe_numeric(e.min_fl_2ph) for e in elements],
             'Min PG fault': [safe_numeric(e.min_fl_pg) for e in elements],
             'Min SN 2P fault': [safe_numeric(e.min_sn_fl_2ph) for e in elements],
-            'Min SN PG fault': [safe_numeric(e.min_sn_fl_pg) for e in elements],
-            # Pickups
+            'Min SN PG fault': [safe_numeric(e.min_sn_fl_pg) for e in elements]
+        }
+
+        pick_ups = {
             'EF PRI PU': dev_reach_factors.get('ef_pickup', []),
             'EF BU PU': dev_reach_factors.get('bu_ef_pickup', []),
             'PH PRI PU': dev_reach_factors.get('ph_pickup', []),
-            'PH BU PU': dev_reach_factors.get('bu_ph_pickup', []),
-            'NPS PRI PU': dev_reach_factors.get('nps_pickup', []),
-            'NPS BU PU': dev_reach_factors.get('bu_nps_pickup', []),
-            # Reach Factors
+            'PH BU PU': dev_reach_factors.get('bu_ph_pickup', [])
+        }
+
+        reach_factors = {
             'EF PRI RF': dev_reach_factors.get('ef_rf', []),
             'EF BU RF': dev_reach_factors.get('bu_ef_rf', []),
             'PH PRI RF': dev_reach_factors.get('ph_rf', []),
             'PH BU RF': dev_reach_factors.get('bu_ph_rf', []),
-            'NPS EF PRI RF': dev_reach_factors.get('nps_ef_rf', []),
-            'NPS EF BU RF': dev_reach_factors.get('bu_nps_ef_rf', []),
-            'NPS PH PRI RF': dev_reach_factors.get('nps_ph_rf', []),
-            'NPS PH BU RF': dev_reach_factors.get('bu_nps_ph_rf', [])
-        })
+        }
+
+        # Nps results are only included if there are nps elements in service.
+        if not nps_oos(device):
+            nps_pick_ups = {
+                'NPS PRI PU': dev_reach_factors.get('nps_pickup', []),
+                'NPS BU PU': dev_reach_factors.get('bu_nps_pickup', [])
+            }
+            nps_reach_factors = {
+                'NPS EF PRI RF': dev_reach_factors.get('nps_ef_rf', []),
+                'NPS EF BU RF': dev_reach_factors.get('bu_nps_ef_rf', []),
+                'NPS PH PRI RF': dev_reach_factors.get('nps_ph_rf', []),
+                'NPS PH BU RF': dev_reach_factors.get('bu_nps_ph_rf', [])
+            }
+            pick_ups.update(nps_pick_ups)
+            reach_factors.update(nps_reach_factors)
+
+        df = pd.DataFrame(fault_levels | pick_ups | reach_factors)
 
         # Sort by Max PG fault descending
         if 'Max PG fault' in df.columns and not df.empty:
@@ -861,3 +941,21 @@ def adjust_cond_damage_col_width(ws) -> None:
 
         elif column_letter in fixed_widths:
             ws.column_dimensions[column_letter].width = fixed_widths[column_letter]
+
+
+def nps_oos(device: dd.Device) -> bool:
+    """
+    Determine whether any nps elements related to the device
+    (including upstream devices) are in service.
+    Returns True if all nps elements are out of service.
+    Returns False if at least one nps element is in service.
+    """
+    section_devices = [device.obj]
+    section_devices.extend([bu_device.obj for bu_device in device.us_devices])
+    all_elements = [get_prot_elements(device_pf) for device_pf in section_devices
+                    if device_pf.GetClassName() == 'ElmRelay'][0]
+    nps_elements = (
+            all_elements['nps_idmt_elements'] + all_elements['nps_inst_elements']
+    )
+    nps_disabled = all([element.IsOutOfService() for element in nps_elements])
+    return nps_disabled

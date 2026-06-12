@@ -87,9 +87,18 @@ def bridge_results(app, external_grid, feeders):
             devices_min_pg[device.obj.loc_name] = {[term.obj.loc_name for term in device.sect_terms if term.min_fl_pg == device.min_fl_pg][0]: device.min_fl_pg}
             devices_sys_norm_min_2p[device.obj.loc_name] = {[term.obj.loc_name for term in device.sect_terms if term.min_sn_fl_2ph == device.min_sn_fl_2ph][0]: device.min_sn_fl_2ph}
             devices_sys_norm_min_pg[device.obj.loc_name] = {[term.obj.loc_name for term in device.sect_terms if term.min_sn_fl_pg == device.min_sn_fl_pg][0]: device.min_sn_fl_pg}
-            sections_trmax_size[device.obj.loc_name] = {[load.obj.loc_name for load in device.sect_loads if load.obj == device.max_ds_tr.obj][0]: device.max_ds_tr.load_kva}
-            devices_max_tr_3p[device.obj.loc_name] = {[load.obj.loc_name for load in device.sect_loads if load.obj == device.max_ds_tr.obj][0]: device.max_ds_tr.max_ph}
-            devices_max_tr_pg[device.obj.loc_name] = {[load.obj.loc_name for load in device.sect_loads if load.obj == device.max_ds_tr.obj][0]: device.max_ds_tr.max_pg}
+            try:
+                sections_trmax_size[device.obj.loc_name] = {[load.obj.loc_name for load in device.sect_loads if load.obj == device.max_ds_tr.obj][0]: device.max_ds_tr.load_kva}
+                devices_max_tr_3p[device.obj.loc_name] = {
+                    [load.obj.loc_name for load in device.sect_loads if load.obj == device.max_ds_tr.obj][
+                        0]: device.max_ds_tr.max_ph}
+                devices_max_tr_pg[device.obj.loc_name] = {
+                    [load.obj.loc_name for load in device.sect_loads if load.obj == device.max_ds_tr.obj][
+                        0]: device.max_ds_tr.max_pg}
+            except IndexError:
+                sections_trmax_size[device.obj.loc_name] = {"NA": "NA"}
+                devices_max_tr_3p[device.obj.loc_name] = {"NA": "NA"}
+                devices_max_tr_pg[device.obj.loc_name] = {"NA": "NA"}
             devices_all_max_3p[device.obj.loc_name] = {term.obj.loc_name: getattr(term, 'max_fl_3ph', 0) for term in device.sect_terms}
             devices_all_max_2p[device.obj.loc_name] = {term.obj.loc_name: getattr(term, 'max_fl_2ph', 0) for term in device.sect_terms}
             devices_all_max_pg[device.obj.loc_name] = {term.obj.loc_name: getattr(term, 'max_fl_pg', 0) for term in device.sect_terms}

@@ -160,9 +160,11 @@ class FaultLevelStudy:
                 grid for grid in self.app.GetCalcRelevantObjects('*.ElmXnet')
                 if grid.outserv == 0
             ]
-        all_feeders = [fdr for fdr in self.app.GetCalcRelevantObjects('*.ElmFeeder')
+        all_feeders = [
+            fdr for fdr in self.app.GetCalcRelevantObjects('*.ElmFeeder')
                        if fdr.GetAll()
-                       and not fdr.IsOutOfService()]
+                       and not fdr.IsOutOfService()
+        ]
 
         radial_list = []
         mesh_list = []
@@ -1235,6 +1237,9 @@ class FaultLevelStudy:
             Dict mapping feeder names to lists of selected device
             objects.
         """
+
+        self.app.PrintPlain("Please make a study selection...")
+
         def _window_dim(feeder_list, feeders_switches, region):
             num_columns = len(feeder_list)
             if region == 'Regional Models':

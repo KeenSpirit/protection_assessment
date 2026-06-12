@@ -211,17 +211,17 @@ def output_results(app, sub_name, external_grid, feeders_devices_inrush, results
     # Write results to the Results sheet and the Detailed Results sheets in MS Excel
     nested_dic(feeders_devices_inrush, 1, "Inrush (A):")
 
-    two_nested_dic(results_max_3p, 2, "Max 3-P fault level (kA) (Site):")
-    two_nested_dic(results_max_2p, 3, "Max 2-P fault level (kA) (Site):")
-    two_nested_dic(results_max_pg, 4, "Max P-G fault level (kA) (Site):")
-    two_nested_dic(results_min_3p, 5, "Min 3-P fault level (kA) (Site):")
-    two_nested_dic(results_min_2p, 6, "Min 2-P fault level (kA) (Site):")
-    two_nested_dic(results_min_pg, 7, "Min P-G fault level (kA) (Site):")
-    two_nested_dic(result_sys_norm_min_2p, 8, "System normal Min 2-P fault level (kA) (Site):")
-    two_nested_dic(result_sys_norm_min_pg, 9, "System normal Min P-G fault level (kA) (Site):")
+    two_nested_dic(results_max_3p, 2, "Max 3-P fault level (A) (Site):")
+    two_nested_dic(results_max_2p, 3, "Max 2-P fault level (A) (Site):")
+    two_nested_dic(results_max_pg, 4, "Max P-G fault level (A) (Site):")
+    two_nested_dic(results_min_3p, 5, "Min 3-P fault level (A) (Site):")
+    two_nested_dic(results_min_2p, 6, "Min 2-P fault level (A) (Site):")
+    two_nested_dic(results_min_pg, 7, "Min P-G fault level (A) (Site):")
+    two_nested_dic(result_sys_norm_min_2p, 8, "System normal Min 2-P fault level (A) (Site):")
+    two_nested_dic(result_sys_norm_min_pg, 9, "System normal Min P-G fault level (A) (Site):")
     two_nested_dic(feeders_sections_trmax_size, 10, "Largest transformer size (kVA) (Site):")
-    two_nested_dic(results_max_tr_3p, 11, "Max 3-P at largest transformer (kA) (Site):")
-    two_nested_dic(results_max_tr_pg, 12, "Max P-G at largest transformer (kA) (Site):")
+    two_nested_dic(results_max_tr_3p, 11, "Max 3-P at largest transformer (A) (Site):")
+    two_nested_dic(results_max_tr_pg, 12, "Max P-G at largest transformer (A) (Site):")
 
     elements_open(fdrs_open_switches, feeders_devices_inrush)
 

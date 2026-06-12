@@ -85,12 +85,7 @@ def device_reach_factors(
         region, device, elements, nps_pickup, fault_impedance
     )
 
-    # Calculate backup reach factors
-    bu_results = _calculate_backup_reach_factors(
-        region, device, elements, fault_impedance
-    )
-
-    return {
+    primary_results = {
         # Primary pickups (repeated for each element for DataFrame compat)
         'ef_pickup': [ef_pickup] * len(elements),
         'ph_pickup': [ph_pickup] * len(elements),
@@ -100,9 +95,26 @@ def device_reach_factors(
         'ph_rf': ph_rf,
         'nps_ef_rf': nps_ef_rf,
         'nps_ph_rf': nps_ph_rf,
-        # Backup data
-        **bu_results,
     }
+
+    # if device is a fuse, set back-up reach factors equal to primary reach factors
+    if device.obj.GetClassName() == ElementType.FUSE.value:
+        bu_results = {
+            'bu_ef_pickup': primary_results['ef_pickup'],
+            'bu_ph_pickup': primary_results['ph_pickup'],
+            'bu_nps_pickup': primary_results['nps_pickup'],
+            'bu_ef_rf': primary_results['ef_rf'],
+            'bu_ph_rf': primary_results['ph_rf'],
+            'bu_nps_ef_rf': primary_results['nps_ef_rf'],
+            'bu_nps_ph_rf': primary_results['nps_ph_rf'],
+        }
+    else:
+        # Calculate backup reach factors
+        bu_results = _calculate_backup_reach_factors(
+            region, device, elements, fault_impedance
+        )
+
+    return primary_results | bu_results
 
 
 def determine_pickup_values(

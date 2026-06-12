@@ -311,7 +311,7 @@ def get_device_sections(app: pft.Application, devices: List[dd.Device]) -> None:
 
         section_lines = _sections(devices_lines)[device.term]
         dataclass_lines = [
-            dd.initialise_line_dataclass(app,
+            dd.initialise_line_dataclass(
                 elmlne, oh_lines=oh_lines_set
             )
             for elmlne in section_lines
