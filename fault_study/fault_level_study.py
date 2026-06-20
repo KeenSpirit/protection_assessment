@@ -491,6 +491,9 @@ def grid_equivalence_check(new_grid_data: Dict) -> bool:
     return True
 
 
+_original_grid_outserv: Dict = {}
+
+
 def reset_min_source_imp(new_grid_data: Dict,
     sys_norm_min: bool = False
 ) -> None:
