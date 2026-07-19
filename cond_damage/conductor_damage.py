@@ -189,7 +189,7 @@ def fault_clear_times(
             f"{device.obj.loc_name} {fault_type} conductor damage "
             f"skipped: missing line fault level data."
         )
-    return {}, fault_type
+        return {}, fault_type
 
     if fault_type in ['2-Phase', '3-Phase']:
         min_fl = line.min_fl_2ph

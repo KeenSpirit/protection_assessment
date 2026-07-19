@@ -125,7 +125,7 @@ def bridge_results(app, external_grid, feeders):
             devices_lines_sys_norm_min_2p[device.obj.loc_name] = {line.obj: getattr(line, 'min_sn_fl_2ph', 0) for line in device.sect_lines}
             devices_lines_sys_norm_min_pg[device.obj.loc_name] = {line.obj: getattr(line, 'min_sn_fl_pg', 0) for line in device.sect_lines}
             devices_lines_type[device.obj.loc_name] = {line.obj: getattr(line, 'line_type', 0) for line in device.sect_lines}
-            devices_lines_therm_rating[device.obj.loc_name] = {line.obj: getattr(line, 'thermal_rating', 0) for line in device.sect_lines}
+            devices_lines_therm_rating[device.obj.loc_name] = {line.obj: get_conductor(line.obj)[1]*1000 for line in device.sect_lines}
         feeders_devices_inrush[feeder] = devices_inrush
         results_max_3p[feeder] = devices_max_3p
         results_max_2p[feeder] = devices_max_2p
@@ -185,6 +185,29 @@ def bridge_results(app, external_grid, feeders):
     #           ]
     # for value in values:
     #     app.PrintPlain(value)
+
+def get_conductor(line):
+    """Looks at the tower geometry or the cable system to return the conductor type and thermal rating
+    """
+    construction = line.typ_id.GetClassName()
+
+    if construction == 'TypGeo':
+        TypCon = line.GetAttribute("e:pCondCir")
+        conductor_type = TypCon.GetAttribute('loc_name')
+        thermal_rating = round(TypCon.GetAttribute("e:Ithr"), 3)
+    elif construction == 'TypCabsys':
+        conductor_type = 'NA'
+        thermal_rating = 'NA'
+    elif construction == "TypLne":
+        conductor_type = line.typ_id.GetAttribute('loc_name')
+        thermal_rating = round(line.typ_id.GetAttribute("e:Ithr"), 3)
+    elif construction == "TypTow":
+        conductor_type = 'NA'
+        thermal_rating = 'NA'
+    else:
+        conductor_type = 'NA'
+        thermal_rating = 'NA'
+    return [conductor_type, thermal_rating]
 
 
 def substation_name(app):
